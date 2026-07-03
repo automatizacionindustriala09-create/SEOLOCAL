@@ -1,0 +1,35 @@
+SEO LOCAL - Limpieza profunda automatica
+
+Ejecuta:
+  LIMPIEZA_PROFUNDA_SEO_LOCAL.cmd
+
+Que elimina:
+- node_modules/
+- dist/
+- payloads temporales _seo_local_*_payload
+- backups _backup_v*
+- instaladores historicos ACTUALIZAR_*.cmd, CORREGIR_*.cmd, INSTALAR_FORZADO_*.cmd, REPARAR_*.cmd
+- documentos historicos README_V*.md, CHANGELOG_V*.md, INSTRUCCIONES_*.md, VALIDACION_TECNICA_*.txt
+- scripts/ACTUALIZAR_*.ps1 y scripts/CORREGIR_*.ps1
+- docs/preview-*.png
+
+Que NO elimina:
+- src/
+- backend/
+- database/
+- docker/
+- public/
+- assets/
+- package.json
+- package-lock.json
+- README.md
+- vite.config.ts
+- tsconfig.json
+- docker-compose.yml
+
+Despues de limpiar:
+  npm install
+  npm run dev
+
+El script genera un log en:
+  cleanup_logs/

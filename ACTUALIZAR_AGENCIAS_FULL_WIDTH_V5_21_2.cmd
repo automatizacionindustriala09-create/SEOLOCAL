@@ -1,0 +1,2 @@
+@echo off
+call "%~dp0DOBLE_CLICK_ACTUALIZAR_AGENCIAS_FULL_WIDTH_V5_21_2.bat"

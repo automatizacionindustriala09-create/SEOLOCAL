@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background-color: #f5f5f5 !important;
+  }
+}
+
+/* Custom exact styles from Vibrant Palette */
+.yelp-red {
+  background-color: #d32323 !important;
+}
+
+.yelp-red-text {
+  color: #d32323 !important;
+}
+
+.bg-soft-black {
+  background-color: #333333 !important;
+}
+
+.hero-overlay {
+  background: rgba(0, 0, 0, 0.45) !important;
+}
+
+.glass-effect {
+  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.95) !important;
+}
+
+.custom-shadow {
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
+}
+
+.category-card:hover {
+  transform: translateY(-4px) !important;
+  transition: all 0.2s ease !important;
+}
+
+.agency-card:hover .agency-title {
+  color: #d32323 !important;
+}
+
+@keyframes pulse-light {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(211, 35, 35, 0.4);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 10px rgba(211, 35, 35, 0);
+  }
+}
+
+.pulsing-cta {
+  animation: pulse-light 2.5s infinite ease-in-out;
+}
+

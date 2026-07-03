@@ -1,0 +1,20 @@
+SEO LOCAL MARKETPLACE v4.1
+POSTGRESQL AUTONOMO + API PROPIA
+
+IMPORTANTE:
+Odoo es solo una referencia para organizar tablas y módulos.
+Este proyecto NO instala ni se conecta con Odoo ERP.
+
+INSTALACION:
+1. Abre Docker Desktop.
+2. Ejecuta INSTALAR_POSTGRESQL_DOCKER.cmd
+3. Espera el mensaje "Instalación completada".
+4. Abre http://localhost:3000
+
+OTRAS DIRECCIONES:
+API: http://localhost:4000/api/v1/health
+pgAdmin: http://localhost:5050
+PostgreSQL: localhost:5433
+
+DOCUMENTACION:
+INSTRUCCIONES_INSTALACION_POSTGRESQL_DOCKER.md

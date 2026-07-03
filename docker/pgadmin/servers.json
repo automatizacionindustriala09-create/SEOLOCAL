@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "SEO Local PostgreSQL",
+      "Group": "Marketplace",
+      "Host": "db",
+      "Port": 5432,
+      "MaintenanceDB": "seo_local",
+      "Username": "seo_local",
+      "SSLMode": "prefer"
+    }
+  }
+}

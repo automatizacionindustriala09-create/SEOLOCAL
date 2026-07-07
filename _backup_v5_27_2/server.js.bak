@@ -4106,7 +4106,7 @@ app.get('/api/v1/admin/agencies', requireDashboardUser, requirePermission('agenc
   const result = await pool.query(`
     SELECT ap.partner_id AS id, p.name, p.email, p.phone, p.website, p.city, p.country_code,
            ap.summary, ap.highlight_review, ap.rating, ap.reviews_count, ap.starting_price,
-           ap.is_verified, ap.is_top_rated, ap.status, ap.logo_letter, ap.logo_bg_color, ap.image_url,
+           ap.is_verified, ap.is_top_rated, ap.status, ap.logo_letter, ap.image_url,
            d.tagline, d.focus, d.methodology, d.client_profile, d.promise_headline,
            d.industries, d.identity_tags, s.status AS subscription_status, sp.name AS plan_name, ap.write_date
     FROM seo_local_agency_profile ap
@@ -4135,9 +4135,9 @@ app.post('/api/v1/admin/agencies', requireDashboardUser, requirePermission('agen
     `, [b.name, b.email || null, b.phone || null, b.website || null, b.city || null, b.country_code || 'CO']);
     const id = partner.rows[0].id;
     await client.query(`
-      INSERT INTO seo_local_agency_profile(partner_id, logo_letter, logo_bg_color, image_url, summary, rating, reviews_count, starting_price, is_verified, is_top_rated, status)
-      VALUES($1, COALESCE(NULLIF($10,''), UPPER(SUBSTRING($2,1,1))), COALESCE(NULLIF($11,''), 'bg-[#D32323]'), COALESCE(NULLIF($12,''), ''), COALESCE($3,''), COALESCE($4,0), COALESCE($5,0), COALESCE($6,0), COALESCE($7,false), COALESCE($8,false), COALESCE($9,'draft'))
-    `, [id, b.name, b.summary, normalizeDashboardNumber(b.rating,0), normalizeDashboardNumber(b.reviews_count,0), normalizeDashboardNumber(b.starting_price,0), b.is_verified, b.is_top_rated, b.status, b.logo_letter, b.logo_bg_color, b.image_url]);
+      INSERT INTO seo_local_agency_profile(partner_id, logo_letter, summary, rating, reviews_count, starting_price, is_verified, is_top_rated, status)
+      VALUES($1, UPPER(SUBSTRING($2,1,1)), COALESCE($3,''), COALESCE($4,0), COALESCE($5,0), COALESCE($6,0), COALESCE($7,false), COALESCE($8,false), COALESCE($9,'draft'))
+    `, [id, b.name, b.summary, normalizeDashboardNumber(b.rating,0), normalizeDashboardNumber(b.reviews_count,0), normalizeDashboardNumber(b.starting_price,0), b.is_verified, b.is_top_rated, b.status]);
     await client.query(`
       INSERT INTO seo_local_agency_profile_detail(agency_partner_id, tagline, focus, methodology, client_profile, promise_headline)
       VALUES($1,COALESCE($2,''),COALESCE($3,''),COALESCE($4,''),COALESCE($5,''),COALESCE($6,''))
@@ -4163,13 +4163,9 @@ app.put('/api/v1/admin/agencies/:id', requireDashboardUser, requirePermission('a
     await client.query(`
       UPDATE seo_local_agency_profile SET summary = COALESCE($2, summary), highlight_review = COALESCE($3, highlight_review),
         rating = COALESCE($4, rating), reviews_count = COALESCE($5, reviews_count), starting_price = COALESCE($6, starting_price),
-        is_verified = COALESCE($7, is_verified), is_top_rated = COALESCE($8, is_top_rated), status = COALESCE($9, status),
-        logo_letter = COALESCE(NULLIF($10, ''), logo_letter),
-        logo_bg_color = COALESCE(NULLIF($11, ''), logo_bg_color),
-        image_url = COALESCE(NULLIF($12, ''), image_url),
-        write_date = NOW()
+        is_verified = COALESCE($7, is_verified), is_top_rated = COALESCE($8, is_top_rated), status = COALESCE($9, status), write_date = NOW()
       WHERE partner_id = $1
-    `, [id, b.summary, b.highlight_review, normalizeDashboardNumber(b.rating), normalizeDashboardNumber(b.reviews_count), normalizeDashboardNumber(b.starting_price), b.is_verified, b.is_top_rated, b.status, b.logo_letter, b.logo_bg_color, b.image_url]);
+    `, [id, b.summary, b.highlight_review, normalizeDashboardNumber(b.rating), normalizeDashboardNumber(b.reviews_count), normalizeDashboardNumber(b.starting_price), b.is_verified, b.is_top_rated, b.status]);
     await client.query(`
       INSERT INTO seo_local_agency_profile_detail(agency_partner_id, tagline, focus, methodology, client_profile, promise_headline, industries, identity_tags)
       VALUES ($1, COALESCE($2,''), COALESCE($3,''), COALESCE($4,''), COALESCE($5,''), COALESCE($6,''), COALESCE($7::jsonb, '[]'::jsonb), COALESCE($8::jsonb, '[]'::jsonb))

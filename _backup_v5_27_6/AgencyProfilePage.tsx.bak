@@ -321,13 +321,6 @@ export default function AgencyProfilePage({
           </div>
         )}
 
-        {(currentAgency as any).status === 'review' && (
-          <div className="mx-4 sm:mx-6 lg:mx-8 mb-4 rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-amber-900 shadow-sm">
-            <p className="text-sm font-black">Agencia temporalmente en vacaciones</p>
-            <p className="mt-1 text-xs font-semibold">Esta agencia mantiene su perfil visible, pero puede tener tiempos de respuesta más altos o disponibilidad limitada.</p>
-          </div>
-        )}
-
         <article id="profile-overview" className="space-y-5 overflow-visible">
           <div className="relative overflow-hidden rounded-none border-y border-gray-200 bg-[#071A2F] shadow-sm">
             <div className="absolute inset-0 bg-[#071A2F]" />

@@ -56,4 +56,36 @@
 .pulsing-cta {
   animation: pulse-light 2.5s infinite ease-in-out;
 }
+/* SEOLOCAL v5.23.8 footer full width start */
+/* Elimina el contenedor central del footer y lo obliga a ocupar todo el ancho real. */
+footer {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
 
+footer .container,
+footer [class*="max-w-"],
+footer [class~="mx-auto"] {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+footer > div,
+footer > section,
+footer > .container,
+footer > [class*="max-w-"] {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+footer [class*="px-4"],
+footer [class*="sm:px-6"],
+footer [class*="lg:px-8"] {
+  padding-left: clamp(24px, 5vw, 72px) !important;
+  padding-right: clamp(24px, 5vw, 72px) !important;
+}
+/* SEOLOCAL v5.23.8 footer full width end */

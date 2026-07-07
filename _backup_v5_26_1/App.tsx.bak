@@ -9,7 +9,6 @@ import { Agency, Service, Offer, SearchState, MarketplaceCategory } from './type
 
 // Import components
 import Header, { AppPage } from './components/Header';
-import DashboardPage from './components/DashboardPage';
 import Hero from './components/Hero';
 import Categories from './components/Categories';
 import FeaturedAgencies from './components/FeaturedAgencies';
@@ -50,7 +49,6 @@ import { X, Heart, ShieldCheck, ShoppingBag, Send, AlertCircle, Phone, Mail, Spa
 
 export default function App() {
   const getPageFromHash = (): AppPage => {
-    if (window.location.hash.startsWith('#/dashboard')) return 'dashboard';
     if (window.location.hash.startsWith('#/buscar')) return 'searchResults';
     if (window.location.hash.startsWith('#/servicios/')) return 'serviceDetail';
     // AGENCY_PROFILE_ROUTE_V5_20_0_MARKER
@@ -672,9 +670,6 @@ export default function App() {
       />
 
       <main className="flex-1">
-        {currentPage === 'dashboard' && (
-          <DashboardPage />
-        )}
         
         {/* Toast confirmation banner */}
         {successToast && (

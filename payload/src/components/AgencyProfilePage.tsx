@@ -290,7 +290,7 @@ export default function AgencyProfilePage({
     ['profile-team', 'Equipo'],
     ['profile-hours', 'Horarios'],
     ['profile-gbp', 'Google Business Profile'],
-    ['profile-reviews', 'Reseñas'],
+    ['profile-gbp-reviews', 'Reseñas'],
   ];
 
   const businessName = currentAgency.name;
@@ -318,6 +318,13 @@ export default function AgencyProfilePage({
         {loadError && (
           <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800">
             {loadError}
+          </div>
+        )}
+
+        {(currentAgency as any).status === 'review' && (
+          <div className="mx-4 sm:mx-6 lg:mx-8 mb-4 rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-amber-900 shadow-sm">
+            <p className="text-sm font-black">Agencia temporalmente en vacaciones</p>
+            <p className="mt-1 text-xs font-semibold">Esta agencia mantiene su perfil visible, pero puede tener tiempos de respuesta más altos o disponibilidad limitada.</p>
           </div>
         )}
 
@@ -475,18 +482,18 @@ export default function AgencyProfilePage({
                 </p>
               </div>
 
-              <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="rounded-2xl border border-red-100 bg-red-50/50 p-4">
-                  <span className="text-[10px] font-black uppercase text-[#D32323]">Enfoque</span>
-                  <p className="mt-2 text-sm font-black text-[#333] leading-snug">{profile.focus}</p>
+              <div className="mt-5 grid grid-cols-1 gap-4">
+                <div className="rounded-2xl border border-red-100 bg-red-50/50 p-5 min-h-[92px] flex flex-col justify-center">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#D32323]">Enfoque</span>
+                  <p className="mt-2 text-sm sm:text-[15px] font-black text-[#333] leading-relaxed">{profile.focus}</p>
                 </div>
-                <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
-                  <span className="text-[10px] font-black uppercase text-[#0074E0]">Industrias</span>
-                  <p className="mt-2 text-sm font-black text-[#333] leading-snug">{profile.industries.join(', ')}</p>
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-5 min-h-[92px] flex flex-col justify-center">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#0074E0]">Industrias</span>
+                  <p className="mt-2 text-sm sm:text-[15px] font-black text-[#333] leading-relaxed">{profile.industries.join(', ')}</p>
                 </div>
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
-                  <span className="text-[10px] font-black uppercase text-emerald-700">Cliente ideal</span>
-                  <p className="mt-2 text-sm font-black text-[#333] leading-snug">{profile.clientProfile}</p>
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-5 min-h-[92px] flex flex-col justify-center">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Cliente ideal</span>
+                  <p className="mt-2 text-sm sm:text-[15px] font-black text-[#333] leading-relaxed">{profile.clientProfile}</p>
                 </div>
               </div>
             </section>
@@ -542,6 +549,70 @@ export default function AgencyProfilePage({
                   <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-[#D32323] text-white flex items-center justify-center shadow-xl ring-4 ring-white"><MapPin className="w-5 h-5 fill-white" /></div>
                     <span className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-[#333] shadow">{currentAgency.city || currentAgency.location}</span>
+                  </div>
+                </div>
+
+                <div id="profile-gbp-reviews" className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 scroll-mt-24">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Star className="w-5 h-5 text-[#D32323] fill-[#D32323]" />
+                        <h3 className="text-lg font-black text-[#333]">Reseñas y Calificaciones</h3>
+                      </div>
+                      <p className="mt-1 text-[10px] uppercase tracking-wider font-black text-gray-400">Reputación auditada desde el perfil local</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReviewNotice('');
+                        setIsReviewModalOpen(true);
+                      }}
+                      className="shrink-0 rounded-xl bg-[#D32323] hover:bg-[#b01c1c] text-white px-4 py-2.5 text-[11px] font-black uppercase tracking-wider inline-flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      <Star className="w-4 h-4 fill-white" /> Escribir reseña
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 lg:grid-cols-[210px_1fr] gap-4">
+                    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 flex flex-col items-center justify-center text-center gap-2 min-w-0">
+                      <strong className="block text-4xl font-black text-[#0B1F3A] leading-none">{currentAgency.rating.toFixed(1)}</strong>
+                      <div className="flex items-center justify-center">{starRow(currentAgency.rating, 'w-3.5 h-3.5')}</div>
+                      <p className="text-[11px] font-black text-[#333] leading-tight break-words max-w-[150px]">{currentAgency.reviewsCount} reseñas verificadas</p>
+                      <p className="text-[10px] font-semibold text-gray-500 leading-snug max-w-[160px]">Promedio reputacional para evaluar confianza local.</p>
+                    </div>
+
+                    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 space-y-2 min-w-0">
+                      {ratingBreakdown.map((item) => (
+                        <div key={item.rating} className="grid grid-cols-[28px_1fr_38px] items-center gap-3 text-[11px] font-bold text-gray-500">
+                          <span>{item.rating}★</span>
+                          <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden"><div className="h-full bg-amber-400" style={{ width: `${item.percent}%` }} /></div>
+                          <span className="text-right">{item.percent}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {reviewNotice && <p className="mt-4 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-xl px-4 py-3 border border-emerald-100">{reviewNotice}</p>}
+
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {payload.reviews.slice(0, 2).map((review) => (
+                      <div key={review.id} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#0074E0] flex items-center justify-center text-xs font-black shrink-0">{review.author.charAt(0)}</div>
+                            <div className="min-w-0">
+                              <h4 className="text-sm font-black text-[#333] truncate">{review.author}</h4>
+                              {starRow(review.rating, 'w-3 h-3')}
+                            </div>
+                          </div>
+                          <div className="text-right text-[10px] font-bold text-gray-400 shrink-0">
+                            <p>{review.createdAt || 'Reciente'}</p>
+                            {review.city && <p>{review.city}</p>}
+                          </div>
+                        </div>
+                        <p className="mt-3 text-xs font-semibold text-gray-600 leading-relaxed line-clamp-2">“{review.body}”</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -642,89 +713,10 @@ export default function AgencyProfilePage({
               </div>
             </section>
 
-            <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
-              <div className="flex items-center gap-2 mb-2">
-                <Link2 className="w-5 h-5 text-[#D32323]" />
-                <h2 className="text-xl font-black text-[#333]">Canales Externos Verificados</h2>
-              </div>
-              <p className="text-[10px] uppercase tracking-wider font-black text-gray-400 border-b border-[#333]/30 pb-3">Enlaces directos para interactuar con la agencia en la web</p>
-              <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-                {payload.channels.map((channel) => (
-                  <a key={channel.id} href={channel.url || '#'} className="rounded-xl border border-gray-200 hover:border-[#D32323]/50 bg-white px-3 py-3 text-xs font-black text-[#333] inline-flex items-center justify-center gap-2 transition-all">
-                    <ExternalLink className="w-3.5 h-3.5 text-gray-400" /> {channel.label}
-                  </a>
-                ))}
-              </div>
-            </section>
+            
 
             
-<section id="profile-reviews" className="bg-white rounded-3xl border border-gray-200 shadow-sm p-5 sm:p-6 scroll-mt-24">
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Star className="w-5 h-5 text-[#D32323] fill-[#D32323]" />
-                    <h2 className="text-xl font-black text-[#333]">Reseñas y Calificaciones</h2>
-                  </div>
-                  <p className="text-[10px] uppercase tracking-wider font-black text-gray-400">Opiniones auditadas, valoración acumulativa y reputación del perfil</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setReviewNotice('');
-                    setIsReviewModalOpen(true);
-                  }}
-                  className="shrink-0 rounded-xl bg-[#D32323] hover:bg-[#b01c1c] text-white px-5 py-3 text-xs font-black uppercase tracking-wider inline-flex items-center justify-center gap-2 shadow-sm"
-                >
-                  <Star className="w-4 h-4 fill-white" /> Escribir reseña
-                </button>
-              </div>
 
-              <div className="mt-5 grid grid-cols-1 xl:grid-cols-[240px_1fr] gap-4">
-                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 flex items-center gap-4">
-                  <div className="text-center w-24 shrink-0">
-                    <strong className="block text-4xl font-black text-[#0B1F3A] leading-none">{currentAgency.rating.toFixed(1)}</strong>
-                    <div className="mt-1">{starRow(currentAgency.rating, 'w-3.5 h-3.5')}</div>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-black text-[#333]">{currentAgency.reviewsCount} reseñas totales</p>
-                    <p className="mt-1 text-[11px] font-semibold text-gray-500 leading-relaxed">Resumen compacto del desempeño reputacional de la agencia.</p>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-2">
-                  {ratingBreakdown.map((item) => (
-                    <div key={item.rating} className="grid grid-cols-[28px_1fr_38px] items-center gap-3 text-[11px] font-bold text-gray-500">
-                      <span>{item.rating}★</span>
-                      <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden"><div className="h-full bg-amber-400" style={{ width: `${item.percent}%` }} /></div>
-                      <span className="text-right">{item.percent}%</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {reviewNotice && <p className="mt-4 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-xl px-4 py-3 border border-emerald-100">{reviewNotice}</p>}
-
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                {payload.reviews.slice(0, 4).map((review) => (
-                  <div key={review.id} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#0074E0] flex items-center justify-center text-xs font-black shrink-0">{review.author.charAt(0)}</div>
-                        <div className="min-w-0">
-                          <h4 className="text-sm font-black text-[#333] truncate">{review.author}</h4>
-                          {starRow(review.rating, 'w-3 h-3')}
-                        </div>
-                      </div>
-                      <div className="text-right text-[10px] font-bold text-gray-400 shrink-0">
-                        <p>{review.createdAt || 'Reciente'}</p>
-                        {review.city && <p>{review.city}</p>}
-                      </div>
-                    </div>
-                    <p className="mt-3 text-xs font-semibold text-gray-600 leading-relaxed line-clamp-3">“{review.body}”</p>
-                  </div>
-                ))}
-              </div>
-            </section>
 
           </div>
 

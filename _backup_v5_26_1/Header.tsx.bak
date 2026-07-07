@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Menu, X, Heart, MessageSquare, ShoppingCart, User, CheckCircle2 } from 'lucide-react';
 
-export type AppPage = 'home' | 'searchResults' | 'agencies' | 'agencyProfile' | 'categories' | 'audit' | 'gbp' | 'localPack' | 'linkBuilding' | 'seoTecnico' | 'onPage' | 'reputation' | 'citations' | 'reports' | 'heatMaps' | 'contentLocal' | 'ecommerceLocal' | 'consultoria' | 'serviceDetail' | 'dashboard';
+export type AppPage = 'home' | 'searchResults' | 'agencies' | 'agencyProfile' | 'categories' | 'audit' | 'gbp' | 'localPack' | 'linkBuilding' | 'seoTecnico' | 'onPage' | 'reputation' | 'citations' | 'reports' | 'heatMaps' | 'contentLocal' | 'ecommerceLocal' | 'consultoria' | 'serviceDetail';
 
 interface HeaderProps {
   currentPage: AppPage;
@@ -86,14 +86,6 @@ export default function Header({
             </button>
             <button type="button" onClick={() => onNavigateHome('services')} className={navClass(currentPage === 'serviceDetail')}>
               Servicios Directos
-            </button>
-            <button
-              type="button"
-              onClick={() => { window.location.hash = '/dashboard'; }}
-              className={navClass(currentPage === 'dashboard')}
-              aria-current={currentPage === 'dashboard' ? 'page' : undefined}
-            >
-              Dashboard
             </button>
             <button
               type="button"
@@ -198,17 +190,6 @@ export default function Header({
           >
             Servicios Directos
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              window.location.hash = '/dashboard';
-              setMobileMenuOpen(false);
-            }}
-            className="block w-full text-left px-3 py-2.5 rounded-lg text-base font-semibold text-[#333] hover:bg-gray-50 hover:text-[#D32323]"
-          >
-            Dashboard interno
-          </button>
-
           <button
             type="button"
             onClick={() => {

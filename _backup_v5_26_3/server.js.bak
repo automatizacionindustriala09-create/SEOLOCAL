@@ -6,23 +6,16 @@ import { pool } from './db.js';
 
 const app = express();
 const port = Number(process.env.API_PORT || 4000);
-const allowedOrigins = `${process.env.CORS_ORIGIN || ''},http://localhost:3000,http://127.0.0.1:3000,http://127.0.1:3000`.split(',')
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://127.0.0.1:3000')
+  .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
-
-
-function isSeoLocalLoopbackFrontendOrigin(origin = '') {
-  const value = String(origin || '').trim();
-  return /^https?:\/\/localhost:3000$/i.test(value)
-    || /^https?:\/\/127(?:\.\d+){1,3}:3000$/i.test(value)
-    || /^https?:\/\/0\.0\.0\.0:3000$/i.test(value);
-}
 
 app.disable('x-powered-by');
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin) || isSeoLocalLoopbackFrontendOrigin(origin)) {
+    if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
       callback(null, true);
       return;
     }
@@ -3776,8 +3769,7 @@ app.get('/api/v1/modules', (_request, response) => {
   });
 });
 
-
-// DASHBOARD_ENTERPRISE_API_V5_27_0_MARKER
+// DASHBOARD_MANAGEMENT_API_V5_26_0_MARKER
 function dashboardHashPassword(password = '') {
   return `sha256:${crypto.createHash('sha256').update(String(password)).digest('hex')}`;
 }
@@ -3788,31 +3780,6 @@ function dashboardHashToken(token = '') {
 
 function normalizeDashboardBoolean(value) {
   return value === true || value === 'true' || value === 1 || value === '1';
-}
-
-function normalizeDashboardNumber(value, fallback = null) {
-  if (value === '' || value === null || value === undefined) return fallback;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function normalizeDashboardSlug(value = '') {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || `item-${Date.now()}`;
-}
-
-async function getDashboardPermissions(roleCode) {
-  const result = await pool.query(`
-    SELECT permission_code
-    FROM seo_local_dashboard_role_permission
-    WHERE role_code = $1
-    ORDER BY permission_code
-  `, [roleCode]);
-  return result.rows.map((row) => row.permission_code);
 }
 
 async function logDashboardAction(client, userId, action, model, resId, payload = {}) {
@@ -3827,82 +3794,29 @@ async function requireDashboardUser(request, response, next) {
     const header = request.headers.authorization || '';
     const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
     if (!token) return response.status(401).json({ error: 'Sesión requerida.' });
-
     const tokenHash = dashboardHashToken(token);
     const result = await pool.query(`
-      SELECT u.id, u.login, u.role_code AS base_role_code,
-             COALESCE(u.dashboard_role_code, u.role_code) AS dashboard_role_code,
-             u.active, u.partner_id, u.agency_partner_id, p.name, r.name AS role_name,
-             s.id AS session_id
+      SELECT u.id, u.login, u.role_code, u.active, p.name, s.id AS session_id
       FROM seo_local_dashboard_session s
       JOIN res_users u ON u.id = s.user_id
       LEFT JOIN res_partner p ON p.id = u.partner_id
-      LEFT JOIN seo_local_dashboard_role r ON r.role_code = COALESCE(u.dashboard_role_code, u.role_code)
       WHERE s.token_hash = $1 AND s.active = TRUE AND s.expires_at > NOW() AND u.active = TRUE
       LIMIT 1
     `, [tokenHash]);
-
     if (!result.rowCount) return response.status(401).json({ error: 'Sesión inválida o vencida.' });
-
-    const user = result.rows[0];
-    const permissions = await getDashboardPermissions(user.dashboard_role_code);
-    await pool.query('UPDATE seo_local_dashboard_session SET last_seen_at = NOW() WHERE id = $1', [user.session_id]);
-
-    request.dashboardUser = {
-      id: user.id,
-      login: user.login,
-      name: user.name || user.login,
-      baseRole: user.base_role_code,
-      roleCode: user.dashboard_role_code,
-      roleName: user.role_name || user.dashboard_role_code,
-      partnerId: user.partner_id,
-      agencyPartnerId: user.agency_partner_id,
-      permissions,
-    };
+    await pool.query('UPDATE seo_local_dashboard_session SET last_seen_at = NOW() WHERE id = $1', [result.rows[0].session_id]);
+    request.dashboardUser = result.rows[0];
     return next();
   } catch (error) {
     return next(error);
   }
 }
 
-function can(request, permission) {
-  return request.dashboardUser?.permissions?.includes(permission);
-}
-
-function requirePermission(...permissions) {
+function requireDashboardRole(...roles) {
   return (request, response, next) => {
-    if (permissions.some((permission) => can(request, permission))) return next();
-    return response.status(403).json({ error: `Permisos insuficientes. Requiere: ${permissions.join(' o ')}` });
-  };
-}
-
-function isAgencyScoped(request) {
-  return request.dashboardUser?.roleCode === 'agency_manager';
-}
-
-function scopedAgencyId(request) {
-  return request.dashboardUser?.agencyPartnerId || null;
-}
-
-function assertAgencyScope(request, agencyId) {
-  if (!isAgencyScoped(request)) return;
-  if (!scopedAgencyId(request) || Number(scopedAgencyId(request)) !== Number(agencyId)) {
-    const error = new Error('Este rol solo puede operar sobre su propia agencia.');
-    error.status = 403;
-    throw error;
-  }
-}
-
-function serializeUser(user) {
-  return {
-    id: user.id,
-    login: user.login,
-    name: user.name || user.login,
-    baseRole: user.baseRole || user.base_role_code,
-    roleCode: user.roleCode || user.dashboard_role_code,
-    roleName: user.roleName || user.role_name || user.dashboard_role_code,
-    agencyPartnerId: user.agencyPartnerId || user.agency_partner_id || null,
-    permissions: user.permissions || [],
+    const role = request.dashboardUser?.role_code;
+    if (!role || (roles.length && !roles.includes(role))) return response.status(403).json({ error: 'Permisos insuficientes.' });
+    next();
   };
 }
 
@@ -3912,24 +3826,18 @@ app.post('/api/v1/admin/auth/login', asyncRoute(async (request, response) => {
   if (!login || !password) return response.status(422).json({ error: 'Usuario y contraseña son obligatorios.' });
 
   const result = await pool.query(`
-    SELECT u.id, u.login, u.password_hash, u.role_code AS base_role_code,
-           COALESCE(u.dashboard_role_code, u.role_code) AS dashboard_role_code,
-           u.active, u.partner_id, u.agency_partner_id, p.name, r.name AS role_name
+    SELECT u.id, u.login, u.password_hash, u.role_code, u.active, p.name
     FROM res_users u
     LEFT JOIN res_partner p ON p.id = u.partner_id
-    LEFT JOIN seo_local_dashboard_role r ON r.role_code = COALESCE(u.dashboard_role_code, u.role_code)
     WHERE LOWER(u.login) = LOWER($1)
     LIMIT 1
   `, [login]);
 
   if (!result.rowCount || !result.rows[0].active) return response.status(401).json({ error: 'Credenciales inválidas.' });
-
   const user = result.rows[0];
   const expected = user.password_hash || '';
   if (expected && expected !== dashboardHashPassword(password)) return response.status(401).json({ error: 'Credenciales inválidas.' });
-
-  const permissions = await getDashboardPermissions(user.dashboard_role_code);
-  if (!permissions.length) return response.status(403).json({ error: 'El usuario no tiene permisos de dashboard.' });
+  if (!['superadmin', 'admin', 'agency', 'support'].includes(user.role_code)) return response.status(403).json({ error: 'El usuario no tiene rol de dashboard.' });
 
   const rawToken = crypto.randomBytes(32).toString('hex');
   const tokenHash = dashboardHashToken(rawToken);
@@ -3937,55 +3845,34 @@ app.post('/api/v1/admin/auth/login', asyncRoute(async (request, response) => {
     INSERT INTO seo_local_dashboard_session(user_id, token_hash, expires_at, user_agent, ip_address)
     VALUES ($1, $2, NOW() + INTERVAL '12 hours', $3, $4)
   `, [user.id, tokenHash, String(request.headers['user-agent'] || ''), request.ip || '']);
-
-  await pool.query('UPDATE res_users SET last_login = NOW(), last_dashboard_login = NOW(), write_date = NOW() WHERE id = $1', [user.id]);
+  await pool.query('UPDATE res_users SET last_login = NOW(), write_date = NOW() WHERE id = $1', [user.id]);
 
   response.json({
     token: rawToken,
-    user: serializeUser({ ...user, permissions }),
+    user: { id: user.id, login: user.login, name: user.name || user.login, roleCode: user.role_code },
   });
 }));
 
 app.get('/api/v1/admin/auth/me', requireDashboardUser, asyncRoute(async (request, response) => {
-  response.json({ token: '', user: serializeUser(request.dashboardUser) });
+  response.json({
+    token: '',
+    user: { id: request.dashboardUser.id, login: request.dashboardUser.login, name: request.dashboardUser.name || request.dashboardUser.login, roleCode: request.dashboardUser.role_code },
+  });
 }));
 
-app.get('/api/v1/admin/roles', requireDashboardUser, requirePermission('users.read'), asyncRoute(async (_request, response) => {
-  const result = await pool.query(`
-    SELECT role_code, name, description, base_role_code, active, sequence
-    FROM seo_local_dashboard_role
-    ORDER BY sequence, role_code
-  `);
-  response.json({ items: result.rows });
-}));
-
-app.get('/api/v1/admin/permissions', requireDashboardUser, requirePermission('users.read'), asyncRoute(async (_request, response) => {
-  const result = await pool.query(`
-    SELECT p.permission_code, p.module_code, p.name, p.description,
-           COALESCE(json_agg(r.role_code ORDER BY r.role_code) FILTER (WHERE r.role_code IS NOT NULL), '[]') AS roles
-    FROM seo_local_dashboard_permission p
-    LEFT JOIN seo_local_dashboard_role_permission r ON r.permission_code = p.permission_code
-    GROUP BY p.permission_code
-    ORDER BY p.module_code, p.permission_code
-  `);
-  response.json({ items: result.rows });
-}));
-
-app.get('/api/v1/admin/dashboard/summary', requireDashboardUser, requirePermission('reports.read'), asyncRoute(async (request, response) => {
-  const agencyFilter = isAgencyScoped(request) ? 'WHERE partner_id = $1' : '';
-  const agencyParams = isAgencyScoped(request) ? [scopedAgencyId(request)] : [];
+app.get('/api/v1/admin/dashboard/summary', requireDashboardUser, asyncRoute(async (_request, response) => {
   const result = await pool.query(`
     SELECT
-      (SELECT COUNT(*)::int FROM seo_local_agency_profile ${agencyFilter}) AS total_agencies,
-      (SELECT COUNT(*)::int FROM seo_local_agency_profile ${agencyFilter ? agencyFilter + " AND status = 'published'" : "WHERE status = 'published'"}) AS published_agencies,
+      (SELECT COUNT(*)::int FROM seo_local_agency_profile) AS total_agencies,
+      (SELECT COUNT(*)::int FROM seo_local_agency_profile WHERE status = 'published') AS published_agencies,
       (SELECT COUNT(*)::int FROM product_template WHERE detailed_type = 'service' AND active = TRUE) AS total_services,
       (SELECT COUNT(*)::int FROM seo_local_category WHERE active = TRUE) AS total_categories,
       (SELECT COUNT(*)::int FROM crm_lead WHERE active = TRUE) AS total_leads,
       (SELECT COUNT(*)::int FROM seo_local_review) AS total_reviews,
       (SELECT COUNT(*)::int FROM seo_local_subscription_plan WHERE active = TRUE) AS total_plans,
-      COALESCE((SELECT ROUND(AVG(rating)::numeric, 2) FROM seo_local_agency_profile ${agencyFilter}), 0) AS average_rating,
+      COALESCE((SELECT ROUND(AVG(rating)::numeric, 2) FROM seo_local_agency_profile), 0) AS average_rating,
       COALESCE((SELECT SUM(expected_revenue) FROM crm_lead WHERE active = TRUE), 0) AS pipeline_value
-  `, agencyParams);
+  `);
   const row = result.rows[0];
   response.json({
     totalAgencies: row.total_agencies,
@@ -4000,176 +3887,39 @@ app.get('/api/v1/admin/dashboard/summary', requireDashboardUser, requirePermissi
   });
 }));
 
-app.get('/api/v1/admin/reports/operational', requireDashboardUser, requirePermission('reports.read'), asyncRoute(async (_request, response) => {
-  const result = await pool.query(`
-    SELECT
-      (SELECT COUNT(*)::int FROM seo_local_agency_profile WHERE status <> 'published') AS agencies_not_published,
-      (SELECT COUNT(*)::int FROM seo_local_agency_profile_service WHERE active = FALSE OR status <> 'active') AS paused_agency_services,
-      (SELECT COUNT(*)::int FROM seo_local_review WHERE status IN ('pending','reported')) AS pending_reviews,
-      (SELECT COUNT(*)::int FROM crm_lead l LEFT JOIN crm_stage s ON s.id = l.stage_id WHERE l.active = TRUE AND COALESCE(s.name,'Nuevo') IN ('Nuevo','Contactado')) AS open_leads,
-      (SELECT COUNT(*)::int FROM product_template WHERE detailed_type='service' AND active=TRUE AND seo_category_id IS NULL) AS services_without_category
-  `);
-  const row = result.rows[0];
-  response.json({
-    alerts: [
-      { label: 'Agencias no publicadas', value: row.agencies_not_published, description: 'Borrador, revisión o suspendidas.' },
-      { label: 'Servicios por agencia pausados', value: row.paused_agency_services, description: 'Relaciones inactivas o en revisión.' },
-      { label: 'Reseñas pendientes/reportadas', value: row.pending_reviews, description: 'Requieren moderación.' },
-      { label: 'Leads abiertos', value: row.open_leads, description: 'Nuevos o contactados.' },
-      { label: 'Servicios sin categoría', value: row.services_without_category, description: 'FUR-S global sin taxonomía.' },
-    ],
-  });
-}));
-
-app.get('/api/v1/admin/users', requireDashboardUser, requirePermission('users.read'), asyncRoute(async (_request, response) => {
-  const result = await pool.query(`
-    SELECT u.id, u.login, p.name, p.email, u.role_code, COALESCE(u.dashboard_role_code,u.role_code) AS dashboard_role_code,
-           r.name AS role_name, u.agency_partner_id, ap.name AS agency_name, u.active, u.last_login, u.last_dashboard_login, u.write_date
-    FROM res_users u
-    JOIN res_partner p ON p.id = u.partner_id
-    LEFT JOIN seo_local_dashboard_role r ON r.role_code = COALESCE(u.dashboard_role_code,u.role_code)
-    LEFT JOIN res_partner ap ON ap.id = u.agency_partner_id
-    ORDER BY r.sequence, u.login
-  `);
-  response.json({ items: result.rows });
-}));
-
-app.post('/api/v1/admin/users', requireDashboardUser, requirePermission('users.manage'), asyncRoute(async (request, response) => {
-  const b = request.body || {};
-  const login = String(b.login || b.email || '').trim().toLowerCase();
-  if (!login) return response.status(422).json({ error: 'login/email obligatorio.' });
-  const password = String(b.password || 'TemporalSEOlocal2026!');
-  const roleCode = String(b.dashboard_role_code || 'support_moderator');
-  const baseRole = roleCode === 'superadmin' ? 'superadmin' : roleCode === 'marketplace_admin' || roleCode === 'content_manager' ? 'admin' : roleCode === 'agency_manager' ? 'agency' : 'support';
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const partner = await client.query(`
-      INSERT INTO res_partner(name, display_name, email, company_type, is_company, active)
-      VALUES ($1,$1,$2,'person',FALSE,TRUE)
-      ON CONFLICT (LOWER(email)) WHERE email IS NOT NULL DO UPDATE SET name=EXCLUDED.name, display_name=EXCLUDED.display_name, active=TRUE, write_date=NOW()
-      RETURNING id
-    `, [b.name || login, login]);
-    const user = await client.query(`
-      INSERT INTO res_users(partner_id, login, password_hash, role_code, dashboard_role_code, agency_partner_id, active, password_changed_at)
-      VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,TRUE),NOW())
-      ON CONFLICT(login) DO UPDATE SET password_hash=EXCLUDED.password_hash, role_code=EXCLUDED.role_code,
-        dashboard_role_code=EXCLUDED.dashboard_role_code, agency_partner_id=EXCLUDED.agency_partner_id, active=EXCLUDED.active, write_date=NOW()
-      RETURNING id
-    `, [partner.rows[0].id, login, dashboardHashPassword(password), baseRole, roleCode, normalizeDashboardNumber(b.agency_partner_id), b.active !== false]);
-    await logDashboardAction(client, request.dashboardUser.id, 'create_or_update', 'res_users', user.rows[0].id, { login, roleCode });
-    await client.query('COMMIT');
-    response.json({ ok: true, id: user.rows[0].id });
-  } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
-}));
-
-app.put('/api/v1/admin/users/:id', requireDashboardUser, requirePermission('users.manage'), asyncRoute(async (request, response) => {
-  const id = Number(request.params.id); const b = request.body || {};
-  const roleCode = b.dashboard_role_code;
-  const baseRole = roleCode === 'superadmin' ? 'superadmin' : roleCode === 'marketplace_admin' || roleCode === 'content_manager' ? 'admin' : roleCode === 'agency_manager' ? 'agency' : roleCode ? 'support' : null;
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const current = await client.query('SELECT partner_id FROM res_users WHERE id=$1', [id]);
-    if (!current.rowCount) return response.status(404).json({ error: 'Usuario no encontrado.' });
-    await client.query(`UPDATE res_partner SET name=COALESCE(NULLIF($2,''),name), email=COALESCE(NULLIF($3,''),email), write_date=NOW() WHERE id=$1`,
-      [current.rows[0].partner_id, b.name, b.email || b.login]);
-    await client.query(`
-      UPDATE res_users SET login=COALESCE(NULLIF($2,''),login), role_code=COALESCE($3,role_code),
-        dashboard_role_code=COALESCE($4,dashboard_role_code), agency_partner_id=$5,
-        active=COALESCE($6,active), write_date=NOW()
-      WHERE id=$1
-    `, [id, b.login, baseRole, roleCode, normalizeDashboardNumber(b.agency_partner_id), b.active]);
-    if (b.password) await client.query('UPDATE res_users SET password_hash=$2, password_changed_at=NOW(), write_date=NOW() WHERE id=$1', [id, dashboardHashPassword(String(b.password))]);
-    await logDashboardAction(client, request.dashboardUser.id, 'update', 'res_users', id, b);
-    await client.query('COMMIT');
-    response.json({ ok: true, id });
-  } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
-}));
-
-app.post('/api/v1/admin/users/:id/reset-password', requireDashboardUser, requirePermission('users.manage'), asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  const password = String(request.body?.password || '');
-  if (password.length < 8) return response.status(422).json({ error: 'La clave debe tener al menos 8 caracteres.' });
-  await pool.query('UPDATE res_users SET password_hash=$2, password_changed_at=NOW(), write_date=NOW() WHERE id=$1', [id, dashboardHashPassword(password)]);
-  await pool.query(`INSERT INTO seo_local_dashboard_audit_log(user_id,action,model,res_id,payload) VALUES($1,'reset_password','res_users',$2,'{}'::jsonb)`, [request.dashboardUser.id, id]);
-  response.json({ ok: true, id });
-}));
-
-app.get('/api/v1/admin/agencies', requireDashboardUser, requirePermission('agencies.read'), asyncRoute(async (request, response) => {
-  const params = [];
-  let where = '';
-  if (isAgencyScoped(request)) {
-    where = 'WHERE ap.partner_id = $1';
-    params.push(scopedAgencyId(request));
-  }
+app.get('/api/v1/admin/agencies', requireDashboardUser, asyncRoute(async (_request, response) => {
   const result = await pool.query(`
     SELECT ap.partner_id AS id, p.name, p.email, p.phone, p.website, p.city, p.country_code,
            ap.summary, ap.highlight_review, ap.rating, ap.reviews_count, ap.starting_price,
-           ap.is_verified, ap.is_top_rated, ap.status, ap.logo_letter, ap.logo_bg_color, ap.image_url,
+           ap.is_verified, ap.is_top_rated, ap.status, ap.logo_letter, ap.image_url,
            d.tagline, d.focus, d.methodology, d.client_profile, d.promise_headline,
-           d.industries, d.identity_tags, s.status AS subscription_status, sp.name AS plan_name, ap.write_date
+           d.industries, d.identity_tags, ap.write_date
     FROM seo_local_agency_profile ap
     JOIN res_partner p ON p.id = ap.partner_id
     LEFT JOIN seo_local_agency_profile_detail d ON d.agency_partner_id = ap.partner_id
-    LEFT JOIN LATERAL (
-      SELECT * FROM seo_local_agency_subscription ss WHERE ss.agency_partner_id = ap.partner_id ORDER BY ss.starts_at DESC, ss.id DESC LIMIT 1
-    ) s ON TRUE
-    LEFT JOIN seo_local_subscription_plan sp ON sp.id = s.plan_id
-    ${where}
     ORDER BY ap.is_top_rated DESC, ap.rating DESC, p.name
-  `, params);
+  `);
   response.json({ items: result.rows.map((row) => ({ ...row, rating: Number(row.rating), starting_price: Number(row.starting_price) })) });
 }));
 
-app.post('/api/v1/admin/agencies', requireDashboardUser, requirePermission('agencies.create'), asyncRoute(async (request, response) => {
-  const b = request.body || {};
-  if (!b.name) return response.status(422).json({ error: 'Nombre obligatorio.' });
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const partner = await client.query(`
-      INSERT INTO res_partner(name, display_name, email, phone, website, city, country_code, company_type, is_company, active)
-      VALUES($1,$1,$2,$3,$4,$5,COALESCE($6,'CO'),'company',TRUE,TRUE)
-      RETURNING id
-    `, [b.name, b.email || null, b.phone || null, b.website || null, b.city || null, b.country_code || 'CO']);
-    const id = partner.rows[0].id;
-    await client.query(`
-      INSERT INTO seo_local_agency_profile(partner_id, logo_letter, logo_bg_color, image_url, summary, rating, reviews_count, starting_price, is_verified, is_top_rated, status)
-      VALUES($1, COALESCE(NULLIF($10,''), UPPER(SUBSTRING($2,1,1))), COALESCE(NULLIF($11,''), 'bg-[#D32323]'), COALESCE(NULLIF($12,''), ''), COALESCE($3,''), COALESCE($4,0), COALESCE($5,0), COALESCE($6,0), COALESCE($7,false), COALESCE($8,false), COALESCE($9,'draft'))
-    `, [id, b.name, b.summary, normalizeDashboardNumber(b.rating,0), normalizeDashboardNumber(b.reviews_count,0), normalizeDashboardNumber(b.starting_price,0), b.is_verified, b.is_top_rated, b.status, b.logo_letter, b.logo_bg_color, b.image_url]);
-    await client.query(`
-      INSERT INTO seo_local_agency_profile_detail(agency_partner_id, tagline, focus, methodology, client_profile, promise_headline)
-      VALUES($1,COALESCE($2,''),COALESCE($3,''),COALESCE($4,''),COALESCE($5,''),COALESCE($6,''))
-    `, [id, b.tagline, b.focus, b.methodology, b.client_profile, b.promise_headline]);
-    await logDashboardAction(client, request.dashboardUser.id, 'create', 'seo_local_agency_profile', id, b);
-    await client.query('COMMIT');
-    response.json({ ok: true, id });
-  } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
-}));
-
-app.put('/api/v1/admin/agencies/:id', requireDashboardUser, requirePermission('agencies.update', 'agencies.own.update'), asyncRoute(async (request, response) => {
+app.put('/api/v1/admin/agencies/:id', requireDashboardUser, requireDashboardRole('superadmin', 'admin', 'agency', 'support'), asyncRoute(async (request, response) => {
   const id = Number(request.params.id);
-  assertAgencyScope(request, id);
-  const b = request.body || {};
+  if (!Number.isInteger(id) || id <= 0) return response.status(422).json({ error: 'Agencia inválida.' });
+  const body = request.body || {};
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query(`
       UPDATE res_partner SET name = COALESCE(NULLIF($2, ''), name), display_name = COALESCE(NULLIF($2, ''), display_name),
-        email = NULLIF($3, ''), phone = NULLIF($4, ''), website = NULLIF($5, ''), city = NULLIF($6, ''), country_code=COALESCE(NULLIF($7,''),country_code), write_date = NOW()
+        email = NULLIF($3, ''), phone = NULLIF($4, ''), website = NULLIF($5, ''), city = NULLIF($6, ''), write_date = NOW()
       WHERE id = $1
-    `, [id, b.name, b.email, b.phone, b.website, b.city, b.country_code]);
+    `, [id, body.name, body.email, body.phone, body.website, body.city]);
     await client.query(`
       UPDATE seo_local_agency_profile SET summary = COALESCE($2, summary), highlight_review = COALESCE($3, highlight_review),
         rating = COALESCE($4, rating), reviews_count = COALESCE($5, reviews_count), starting_price = COALESCE($6, starting_price),
-        is_verified = COALESCE($7, is_verified), is_top_rated = COALESCE($8, is_top_rated), status = COALESCE($9, status),
-        logo_letter = COALESCE(NULLIF($10, ''), logo_letter),
-        logo_bg_color = COALESCE(NULLIF($11, ''), logo_bg_color),
-        image_url = COALESCE(NULLIF($12, ''), image_url),
-        write_date = NOW()
+        is_verified = COALESCE($7, is_verified), is_top_rated = COALESCE($8, is_top_rated), status = COALESCE($9, status), write_date = NOW()
       WHERE partner_id = $1
-    `, [id, b.summary, b.highlight_review, normalizeDashboardNumber(b.rating), normalizeDashboardNumber(b.reviews_count), normalizeDashboardNumber(b.starting_price), b.is_verified, b.is_top_rated, b.status, b.logo_letter, b.logo_bg_color, b.image_url]);
+    `, [id, body.summary, body.highlight_review, body.rating, body.reviews_count, body.starting_price, body.is_verified, body.is_top_rated, body.status]);
     await client.query(`
       INSERT INTO seo_local_agency_profile_detail(agency_partner_id, tagline, focus, methodology, client_profile, promise_headline, industries, identity_tags)
       VALUES ($1, COALESCE($2,''), COALESCE($3,''), COALESCE($4,''), COALESCE($5,''), COALESCE($6,''), COALESCE($7::jsonb, '[]'::jsonb), COALESCE($8::jsonb, '[]'::jsonb))
@@ -4177,135 +3927,28 @@ app.put('/api/v1/admin/agencies/:id', requireDashboardUser, requirePermission('a
         tagline = EXCLUDED.tagline, focus = EXCLUDED.focus, methodology = EXCLUDED.methodology,
         client_profile = EXCLUDED.client_profile, promise_headline = EXCLUDED.promise_headline,
         industries = EXCLUDED.industries, identity_tags = EXCLUDED.identity_tags, write_date = NOW()
-    `, [id, b.tagline, b.focus, b.methodology, b.client_profile, b.promise_headline, JSON.stringify(b.industries || []), JSON.stringify(b.identity_tags || [])]);
-    await logDashboardAction(client, request.dashboardUser.id, 'update', 'seo_local_agency_profile', id, b);
+    `, [id, body.tagline, body.focus, body.methodology, body.client_profile, body.promise_headline, JSON.stringify(body.industries || []), JSON.stringify(body.identity_tags || [])]);
+    await logDashboardAction(client, request.dashboardUser.id, 'update', 'seo_local_agency_profile', id, body);
     await client.query('COMMIT');
     response.json({ ok: true, id });
   } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
 }));
 
-app.post('/api/v1/admin/agencies/:id/status', requireDashboardUser, requirePermission('agencies.publish'), asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  const status = String(request.body?.status || 'draft');
-  await pool.query(`UPDATE seo_local_agency_profile SET status=$2, write_date=NOW() WHERE partner_id=$1`, [id, status]);
-  await pool.query(`INSERT INTO seo_local_dashboard_audit_log(user_id,action,model,res_id,payload) VALUES($1,'status','seo_local_agency_profile',$2,$3::jsonb)`, [request.dashboardUser.id, id, JSON.stringify({ status })]);
-  response.json({ ok: true, id, status });
+app.get('/api/v1/admin/categories', requireDashboardUser, asyncRoute(async (_request, response) => {
+  const result = await pool.query(`SELECT id, external_id, name, slug, description, query_name, services_count, sequence, active, write_date FROM seo_local_category ORDER BY sequence, name`);
+  response.json({ items: result.rows });
 }));
 
-app.get('/api/v1/admin/agencies/:id/modules', requireDashboardUser, requirePermission('agency_profile.modules', 'agency_profile.own.modules'), asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  assertAgencyScope(request, id);
-  const [detail, channels, hours, team, certifications] = await Promise.all([
-    pool.query('SELECT * FROM seo_local_agency_profile_detail WHERE agency_partner_id=$1', [id]),
-    pool.query('SELECT * FROM seo_local_agency_channel WHERE agency_partner_id=$1 ORDER BY sequence,id', [id]),
-    pool.query('SELECT * FROM seo_local_agency_business_hour WHERE agency_partner_id=$1 ORDER BY sequence,id', [id]),
-    pool.query('SELECT * FROM seo_local_agency_team_member WHERE agency_partner_id=$1 ORDER BY sequence,id', [id]),
-    pool.query('SELECT * FROM seo_local_agency_certification WHERE agency_partner_id=$1 ORDER BY sequence,id', [id]),
-  ]);
-  response.json({ detail: detail.rows[0] || {}, channels: channels.rows, hours: hours.rows, team: team.rows, certifications: certifications.rows });
-}));
-
-app.put('/api/v1/admin/agencies/:id/modules/:module', requireDashboardUser, requirePermission('agency_profile.modules', 'agency_profile.own.modules'), asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  const module = String(request.params.module || '');
-  assertAgencyScope(request, id);
-  const b = request.body || {};
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    if (module === 'detail') {
-      await client.query(`
-        INSERT INTO seo_local_agency_profile_detail(agency_partner_id, tagline, focus, methodology, industries, client_profile, identity_tags, promise_headline, active)
-        VALUES($1,COALESCE($2,''),COALESCE($3,''),COALESCE($4,''),COALESCE($5::jsonb,'[]'::jsonb),COALESCE($6,''),COALESCE($7::jsonb,'[]'::jsonb),COALESCE($8,''),COALESCE($9,TRUE))
-        ON CONFLICT(agency_partner_id) DO UPDATE SET tagline=EXCLUDED.tagline, focus=EXCLUDED.focus, methodology=EXCLUDED.methodology,
-          industries=EXCLUDED.industries, client_profile=EXCLUDED.client_profile, identity_tags=EXCLUDED.identity_tags,
-          promise_headline=EXCLUDED.promise_headline, active=EXCLUDED.active, write_date=NOW()
-      `, [id, b.tagline, b.focus, b.methodology, JSON.stringify(b.industries || []), b.client_profile, JSON.stringify(b.identity_tags || []), b.promise_headline, b.active]);
-    } else {
-      const tableMap = {
-        channels: 'seo_local_agency_channel',
-        hours: 'seo_local_agency_business_hour',
-        team: 'seo_local_agency_team_member',
-        certifications: 'seo_local_agency_certification',
-      };
-      const table = tableMap[module];
-      if (!table) return response.status(422).json({ error: 'Módulo inválido.' });
-      const rows = Array.isArray(b) ? b : [];
-      await client.query(`DELETE FROM ${table} WHERE agency_partner_id=$1`, [id]);
-      for (const [idx, row] of rows.entries()) {
-        if (module === 'channels') await client.query(`INSERT INTO seo_local_agency_channel(agency_partner_id, channel_type, label, value, url, is_verified, sequence, active) VALUES($1,$2,$3,$4,$5,COALESCE($6,TRUE),$7,COALESCE($8,TRUE))`, [id, row.channel_type || row.type || 'website', row.label || 'Canal', row.value || '', row.url || '', row.is_verified, row.sequence || idx + 1, row.active]);
-        if (module === 'hours') await client.query(`INSERT INTO seo_local_agency_business_hour(agency_partner_id, day_label, opens_at, closes_at, is_closed, sequence) VALUES($1,$2,$3,$4,COALESCE($5,FALSE),$6)`, [id, row.day_label || 'Día', row.opens_at || '', row.closes_at || '', row.is_closed, row.sequence || idx + 1]);
-        if (module === 'team') await client.query(`INSERT INTO seo_local_agency_team_member(agency_partner_id, name, role_title, bio, avatar_url, specialty, sequence, active) VALUES($1,$2,$3,$4,$5,$6,$7,COALESCE($8,TRUE))`, [id, row.name || 'Miembro', row.role_title || row.role || 'Especialista', row.bio || '', row.avatar_url || '', row.specialty || '', row.sequence || idx + 1, row.active]);
-        if (module === 'certifications') await client.query(`INSERT INTO seo_local_agency_certification(agency_partner_id, issuer, title, credential_url, valid_until, sequence, active) VALUES($1,$2,$3,$4,NULLIF($5,'')::date,$6,COALESCE($7,TRUE))`, [id, row.issuer || 'Certificador', row.title || 'Certificación', row.credential_url || '', row.valid_until || null, row.sequence || idx + 1, row.active]);
-      }
-    }
-    await logDashboardAction(client, request.dashboardUser.id, 'update_module', `seo_local_agency_${module}`, id, b);
-    await client.query('COMMIT');
-    response.json({ ok: true, id, module });
-  } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
-}));
-
-app.get('/api/v1/admin/agency-services', requireDashboardUser, requirePermission('agency_services.read'), asyncRoute(async (request, response) => {
-  const agencyId = normalizeDashboardNumber(request.query.agencyId);
-  const params = [];
-  const filters = [];
-  if (agencyId) { filters.push(`aps.agency_partner_id = $${params.length + 1}`); params.push(agencyId); }
-  if (isAgencyScoped(request)) { filters.push(`aps.agency_partner_id = $${params.length + 1}`); params.push(scopedAgencyId(request)); }
-  const result = await pool.query(`
-    SELECT aps.id, aps.agency_partner_id, ag.name AS agency_name, aps.product_tmpl_id, pt.name AS service_name,
-           pt.default_code, aps.title_override, aps.subtitle_override, aps.custom_price, aps.delivery_days,
-           aps.capacity_monthly, aps.status, aps.is_featured, aps.included, aps.sequence, aps.active, aps.write_date
-    FROM seo_local_agency_profile_service aps
-    JOIN res_partner ag ON ag.id = aps.agency_partner_id
-    JOIN product_template pt ON pt.id = aps.product_tmpl_id
-    ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}
-    ORDER BY ag.name, aps.sequence, pt.name
-  `, params);
-  response.json({ items: result.rows.map(row => ({ ...row, custom_price: row.custom_price === null ? null : Number(row.custom_price) })) });
-}));
-
-app.post('/api/v1/admin/agency-services', requireDashboardUser, requirePermission('agency_services.manage', 'agency_services.own.manage'), asyncRoute(async (request, response) => {
-  const b = request.body || {};
-  const agencyId = normalizeDashboardNumber(b.agency_partner_id);
-  assertAgencyScope(request, agencyId);
-  const result = await pool.query(`
-    INSERT INTO seo_local_agency_profile_service(agency_partner_id, product_tmpl_id, title_override, subtitle_override, custom_price, delivery_days, capacity_monthly, status, is_featured, active)
-    VALUES($1,$2,$3,$4,$5,$6,$7,COALESCE($8,'active'),COALESCE($9,FALSE),COALESCE($10,TRUE))
-    ON CONFLICT(agency_partner_id, product_tmpl_id) DO UPDATE SET title_override=EXCLUDED.title_override, subtitle_override=EXCLUDED.subtitle_override,
-      custom_price=EXCLUDED.custom_price, delivery_days=EXCLUDED.delivery_days, capacity_monthly=EXCLUDED.capacity_monthly, status=EXCLUDED.status,
-      is_featured=EXCLUDED.is_featured, active=EXCLUDED.active, write_date=NOW()
-    RETURNING id
-  `, [agencyId, normalizeDashboardNumber(b.product_tmpl_id), b.title_override || null, b.subtitle_override || null, normalizeDashboardNumber(b.custom_price), normalizeDashboardNumber(b.delivery_days), normalizeDashboardNumber(b.capacity_monthly), b.status, b.is_featured, b.active]);
-  response.json({ ok: true, id: result.rows[0].id });
-}));
-
-app.put('/api/v1/admin/agency-services/:id', requireDashboardUser, requirePermission('agency_services.manage', 'agency_services.own.manage'), asyncRoute(async (request, response) => {
+app.put('/api/v1/admin/categories/:id', requireDashboardUser, requireDashboardRole('superadmin', 'admin', 'support'), asyncRoute(async (request, response) => {
   const id = Number(request.params.id); const b = request.body || {};
-  const current = await pool.query('SELECT agency_partner_id FROM seo_local_agency_profile_service WHERE id=$1', [id]);
-  if (!current.rowCount) return response.status(404).json({ error: 'Relación agencia-servicio no encontrada.' });
-  assertAgencyScope(request, current.rows[0].agency_partner_id);
-  await pool.query(`
-    UPDATE seo_local_agency_profile_service SET title_override=$2, subtitle_override=$3, custom_price=$4,
-      delivery_days=$5, capacity_monthly=$6, status=COALESCE($7,status), is_featured=COALESCE($8,is_featured),
-      active=COALESCE($9,active), included=COALESCE($10,included), sequence=COALESCE($11,sequence), write_date=NOW()
-    WHERE id=$1
-  `, [id, b.title_override || null, b.subtitle_override || null, normalizeDashboardNumber(b.custom_price), normalizeDashboardNumber(b.delivery_days), normalizeDashboardNumber(b.capacity_monthly), b.status, b.is_featured, b.active, b.included, normalizeDashboardNumber(b.sequence)]);
+  await pool.query(`UPDATE seo_local_category SET name=COALESCE($2,name), description=COALESCE($3,description), query_name=COALESCE($4,query_name), services_count=COALESCE($5,services_count), sequence=COALESCE($6,sequence), active=COALESCE($7,active), write_date=NOW() WHERE id=$1`, [id, b.name, b.description, b.query_name, b.services_count, b.sequence, b.active]);
+  await pool.query(`INSERT INTO seo_local_dashboard_audit_log(user_id,action,model,res_id,payload) VALUES($1,'update','seo_local_category',$2,$3::jsonb)`, [request.dashboardUser.id, id, JSON.stringify(b)]);
   response.json({ ok: true, id });
 }));
 
-app.delete('/api/v1/admin/agency-services/:id', requireDashboardUser, requirePermission('agency_services.manage', 'agency_services.own.manage'), asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  const current = await pool.query('SELECT agency_partner_id FROM seo_local_agency_profile_service WHERE id=$1', [id]);
-  if (!current.rowCount) return response.status(404).json({ error: 'Relación agencia-servicio no encontrada.' });
-  assertAgencyScope(request, current.rows[0].agency_partner_id);
-  await pool.query('UPDATE seo_local_agency_profile_service SET active=FALSE, status=\'archived\', write_date=NOW() WHERE id=$1', [id]);
-  response.json({ ok: true, id });
-}));
-
-app.get('/api/v1/admin/services', requireDashboardUser, requirePermission('services.read'), asyncRoute(async (_request, response) => {
+app.get('/api/v1/admin/services', requireDashboardUser, asyncRoute(async (_request, response) => {
   const result = await pool.query(`
-    SELECT pt.id, pt.external_id, pt.name, pt.default_code, pt.description_sale, pt.seo_category_id,
-           pt.list_price, pt.currency_code, pt.delivery_days, pt.is_popular, pt.active,
+    SELECT pt.id, pt.external_id, pt.name, pt.default_code, pt.description_sale, pt.list_price, pt.currency_code, pt.delivery_days, pt.is_popular, pt.active,
            c.name AS category_name, fur.fur_number, fur.fur_code, fur.billing_period
     FROM product_template pt
     LEFT JOIN seo_local_category c ON c.id = pt.seo_category_id
@@ -4316,216 +3959,82 @@ app.get('/api/v1/admin/services', requireDashboardUser, requirePermission('servi
   response.json({ items: result.rows.map((row) => ({ ...row, list_price: Number(row.list_price) })) });
 }));
 
-app.post('/api/v1/admin/services', requireDashboardUser, requirePermission('services.manage'), asyncRoute(async (request, response) => {
-  const b = request.body || {};
-  const slug = normalizeDashboardSlug(b.name || b.default_code);
-  const result = await pool.query(`
-    INSERT INTO product_template(external_id, name, default_code, detailed_type, description_sale, seo_category_id, list_price, currency_code, delivery_days, is_popular, active)
-    VALUES($1,$2,$3,'service',COALESCE($4,''),$5,COALESCE($6,0),COALESCE($7,'USD'),COALESCE($8,7),COALESCE($9,FALSE),COALESCE($10,TRUE))
-    RETURNING id
-  `, [`srv-${slug}-${Date.now()}`, b.name || 'Nuevo servicio FUR-S', b.default_code || `FUR-S-${Date.now()}`, b.description_sale, normalizeDashboardNumber(b.seo_category_id), normalizeDashboardNumber(b.list_price,0), b.currency_code || 'USD', normalizeDashboardNumber(b.delivery_days,7), b.is_popular, b.active]);
-  response.json({ ok: true, id: result.rows[0].id });
-}));
-
-app.put('/api/v1/admin/services/:id', requireDashboardUser, requirePermission('services.manage'), asyncRoute(async (request, response) => {
+app.put('/api/v1/admin/services/:id', requireDashboardUser, requireDashboardRole('superadmin', 'admin', 'support'), asyncRoute(async (request, response) => {
   const id = Number(request.params.id); const b = request.body || {};
-  await pool.query(`UPDATE product_template SET name=COALESCE($2,name), default_code=COALESCE($3,default_code), description_sale=COALESCE($4,description_sale), seo_category_id=COALESCE($5,seo_category_id), list_price=COALESCE($6,list_price), currency_code=COALESCE($7,currency_code), delivery_days=COALESCE($8,delivery_days), is_popular=COALESCE($9,is_popular), active=COALESCE($10,active), write_date=NOW() WHERE id=$1`, [id, b.name, b.default_code, b.description_sale, normalizeDashboardNumber(b.seo_category_id), normalizeDashboardNumber(b.list_price), b.currency_code, normalizeDashboardNumber(b.delivery_days), b.is_popular, b.active]);
+  await pool.query(`UPDATE product_template SET name=COALESCE($2,name), default_code=COALESCE($3,default_code), description_sale=COALESCE($4,description_sale), list_price=COALESCE($5,list_price), currency_code=COALESCE($6,currency_code), delivery_days=COALESCE($7,delivery_days), is_popular=COALESCE($8,is_popular), active=COALESCE($9,active), write_date=NOW() WHERE id=$1`, [id, b.name, b.default_code, b.description_sale, b.list_price, b.currency_code, b.delivery_days, b.is_popular, b.active]);
   await pool.query(`INSERT INTO seo_local_dashboard_audit_log(user_id,action,model,res_id,payload) VALUES($1,'update','product_template',$2,$3::jsonb)`, [request.dashboardUser.id, id, JSON.stringify(b)]);
   response.json({ ok: true, id });
 }));
 
-app.post('/api/v1/admin/services/:id/duplicate', requireDashboardUser, requirePermission('services.manage'), asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  const result = await pool.query(`
-    INSERT INTO product_template(external_id, name, default_code, detailed_type, description_sale, seo_category_id, list_price, currency_code, delivery_days, is_popular, active)
-    SELECT external_id || '-copy-' || extract(epoch from now())::int, name || ' Copia', default_code || '-COPY', detailed_type, description_sale, seo_category_id, list_price, currency_code, delivery_days, FALSE, FALSE
-    FROM product_template WHERE id=$1
-    RETURNING id
-  `, [id]);
-  response.json({ ok: true, id: result.rows[0]?.id });
-}));
-
-app.get('/api/v1/admin/leads/stages', requireDashboardUser, requirePermission('leads.read'), asyncRoute(async (_request, response) => {
-  const result = await pool.query('SELECT id, name, sequence, probability, is_won, active FROM crm_stage ORDER BY sequence, id');
-  response.json({ items: result.rows });
-}));
-
-app.get('/api/v1/admin/leads', requireDashboardUser, requirePermission('leads.read'), asyncRoute(async (request, response) => {
-  const params = [];
-  const filters = ['l.active = TRUE'];
-  if (isAgencyScoped(request)) { filters.push(`l.agency_partner_id = $${params.length + 1}`); params.push(scopedAgencyId(request)); }
+app.get('/api/v1/admin/leads', requireDashboardUser, asyncRoute(async (_request, response) => {
   const result = await pool.query(`
     SELECT l.id, l.reference, l.name, l.contact_name, l.email_from, l.phone, l.company_name, l.description, l.target_location, l.expected_revenue, l.probability,
-           l.agency_partner_id, ag.name AS agency_name, COALESCE(s.name, 'Nuevo') AS stage_name, c.name AS category_name, l.create_date, l.write_date
+           COALESCE(s.name, 'Nuevo') AS stage_name, c.name AS category_name, l.create_date, l.write_date
     FROM crm_lead l
     LEFT JOIN crm_stage s ON s.id = l.stage_id
     LEFT JOIN seo_local_category c ON c.id = l.seo_category_id
-    LEFT JOIN res_partner ag ON ag.id = l.agency_partner_id
-    WHERE ${filters.join(' AND ')}
+    WHERE l.active = TRUE
     ORDER BY l.create_date DESC
-    LIMIT 300
-  `, params);
+    LIMIT 250
+  `);
   response.json({ items: result.rows.map((row) => ({ ...row, expected_revenue: Number(row.expected_revenue), probability: Number(row.probability) })) });
 }));
 
-app.post('/api/v1/admin/leads', requireDashboardUser, requirePermission('leads.manage', 'leads.own.manage'), asyncRoute(async (request, response) => {
-  const b = request.body || {};
-  if (isAgencyScoped(request)) b.agency_partner_id = scopedAgencyId(request);
-  const stage = await pool.query('SELECT id FROM crm_stage WHERE name=$1 LIMIT 1', [b.stage_name || 'Nuevo']);
-  const result = await pool.query(`
-    INSERT INTO crm_lead(name, contact_name, email_from, phone, company_name, description, target_location, expected_revenue, probability, stage_id, agency_partner_id, active)
-    VALUES($1,$2,$3,$4,$5,COALESCE($6,''),$7,COALESCE($8,0),COALESCE($9,0),$10,$11,TRUE)
-    RETURNING id
-  `, [b.name || 'Nuevo lead', b.contact_name || '', b.email_from || 'sin-email@local.test', b.phone || '', b.company_name || '', b.description || '', b.target_location || '', normalizeDashboardNumber(b.expected_revenue,0), normalizeDashboardNumber(b.probability,0), stage.rows[0]?.id || null, normalizeDashboardNumber(b.agency_partner_id)]);
-  response.json({ ok: true, id: result.rows[0].id });
-}));
-
-app.put('/api/v1/admin/leads/:id', requireDashboardUser, requirePermission('leads.manage', 'leads.own.manage'), asyncRoute(async (request, response) => {
+app.put('/api/v1/admin/leads/:id', requireDashboardUser, requireDashboardRole('superadmin', 'admin', 'support'), asyncRoute(async (request, response) => {
   const id = Number(request.params.id); const b = request.body || {};
-  const current = await pool.query('SELECT agency_partner_id FROM crm_lead WHERE id=$1', [id]);
-  if (!current.rowCount) return response.status(404).json({ error: 'Lead no encontrado.' });
-  if (isAgencyScoped(request)) assertAgencyScope(request, current.rows[0].agency_partner_id);
   let stageId = null;
   if (b.stage_name) {
     const stage = await pool.query('SELECT id FROM crm_stage WHERE name = $1 LIMIT 1', [b.stage_name]);
     stageId = stage.rows[0]?.id || null;
   }
-  await pool.query(`UPDATE crm_lead SET name=COALESCE($2,name), contact_name=COALESCE($3,contact_name), email_from=COALESCE($4,email_from), phone=COALESCE($5,phone), company_name=COALESCE($6,company_name), description=COALESCE($7,description), target_location=COALESCE($8,target_location), expected_revenue=COALESCE($9,expected_revenue), probability=COALESCE($10,probability), stage_id=COALESCE($11,stage_id), agency_partner_id=COALESCE($12,agency_partner_id), write_date=NOW() WHERE id=$1`, [id, b.name, b.contact_name, b.email_from, b.phone, b.company_name, b.description, b.target_location, normalizeDashboardNumber(b.expected_revenue), normalizeDashboardNumber(b.probability), stageId, normalizeDashboardNumber(b.agency_partner_id)]);
+  await pool.query(`UPDATE crm_lead SET name=COALESCE($2,name), contact_name=COALESCE($3,contact_name), email_from=COALESCE($4,email_from), phone=COALESCE($5,phone), company_name=COALESCE($6,company_name), description=COALESCE($7,description), target_location=COALESCE($8,target_location), expected_revenue=COALESCE($9,expected_revenue), probability=COALESCE($10,probability), stage_id=COALESCE($11,stage_id), write_date=NOW() WHERE id=$1`, [id, b.name, b.contact_name, b.email_from, b.phone, b.company_name, b.description, b.target_location, b.expected_revenue, b.probability, stageId]);
+  await pool.query(`INSERT INTO seo_local_dashboard_audit_log(user_id,action,model,res_id,payload) VALUES($1,'update','crm_lead',$2,$3::jsonb)`, [request.dashboardUser.id, id, JSON.stringify(b)]);
   response.json({ ok: true, id });
 }));
 
-app.post('/api/v1/admin/leads/:id/notes', requireDashboardUser, requirePermission('activity.create'), asyncRoute(async (request, response) => {
-  const id = Number(request.params.id); const note = String(request.body?.note || '').trim();
-  if (!note) return response.status(422).json({ error: 'Nota obligatoria.' });
-  await pool.query(`INSERT INTO seo_local_dashboard_note(model,res_id,user_id,note) VALUES('crm_lead',$1,$2,$3)`, [id, request.dashboardUser.id, note]);
-  response.json({ ok: true, id });
-}));
-
-app.get('/api/v1/admin/reviews', requireDashboardUser, requirePermission('reviews.read'), asyncRoute(async (request, response) => {
-  const params = [];
-  const filters = [];
-  if (isAgencyScoped(request)) { filters.push(`r.agency_partner_id = $${params.length + 1}`); params.push(scopedAgencyId(request)); }
+app.get('/api/v1/admin/reviews', requireDashboardUser, asyncRoute(async (_request, response) => {
   const result = await pool.query(`
-    SELECT r.id, r.agency_partner_id, ag.name AS agency_name, COALESCE(author.name, 'Cliente verificado') AS author, r.rating, r.title, r.body, r.status, r.verified_purchase, r.agency_response, r.create_date
+    SELECT r.id, ap.partner_id AS agency_id, ag.name AS agency_name, COALESCE(author.name, 'Cliente verificado') AS author, r.rating, r.title, r.body, r.status, r.verified_purchase, r.create_date
     FROM seo_local_review r
-    JOIN res_partner ag ON ag.id = r.agency_partner_id
+    JOIN seo_local_agency_profile ap ON ap.partner_id = r.agency_partner_id
+    JOIN res_partner ag ON ag.id = ap.partner_id
     LEFT JOIN res_partner author ON author.id = r.author_partner_id
-    ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}
     ORDER BY r.create_date DESC, r.id DESC
-    LIMIT 300
-  `, params);
+    LIMIT 250
+  `);
   response.json({ items: result.rows.map((row) => ({ ...row, rating: Number(row.rating) })) });
 }));
 
-app.post('/api/v1/admin/reviews', requireDashboardUser, requirePermission('reviews.moderate'), asyncRoute(async (request, response) => {
-  const b = request.body || {};
-  const result = await pool.query(`
-    INSERT INTO seo_local_review(agency_partner_id, rating, title, body, status, verified_purchase, agency_response)
-    VALUES($1,COALESCE($2,5),COALESCE($3,''),COALESCE($4,''),COALESCE($5,'pending'),COALESCE($6,FALSE),COALESCE($7,''))
-    RETURNING id
-  `, [normalizeDashboardNumber(b.agency_partner_id), normalizeDashboardNumber(b.rating,5), b.title, b.body, b.status, b.verified_purchase, b.agency_response]);
-  response.json({ ok: true, id: result.rows[0].id });
-}));
-
-app.put('/api/v1/admin/reviews/:id', requireDashboardUser, requirePermission('reviews.moderate', 'reviews.own.respond'), asyncRoute(async (request, response) => {
+app.put('/api/v1/admin/reviews/:id', requireDashboardUser, requireDashboardRole('superadmin', 'admin', 'support'), asyncRoute(async (request, response) => {
   const id = Number(request.params.id); const b = request.body || {};
-  const current = await pool.query('SELECT agency_partner_id FROM seo_local_review WHERE id=$1', [id]);
-  if (!current.rowCount) return response.status(404).json({ error: 'Reseña no encontrada.' });
-  if (isAgencyScoped(request)) assertAgencyScope(request, current.rows[0].agency_partner_id);
-  await pool.query(`UPDATE seo_local_review SET rating=COALESCE($2,rating), title=COALESCE($3,title), body=COALESCE($4,body), status=COALESCE($5,status), verified_purchase=COALESCE($6,verified_purchase), agency_response=COALESCE($7,agency_response), write_date=NOW() WHERE id=$1`, [id, normalizeDashboardNumber(b.rating), b.title, b.body, b.status, b.verified_purchase, b.agency_response]);
+  await pool.query(`UPDATE seo_local_review SET rating=COALESCE($2,rating), title=COALESCE($3,title), body=COALESCE($4,body), status=COALESCE($5,status), verified_purchase=COALESCE($6,verified_purchase), write_date=NOW() WHERE id=$1`, [id, b.rating, b.title, b.body, b.status, b.verified_purchase]);
+  await pool.query(`INSERT INTO seo_local_dashboard_audit_log(user_id,action,model,res_id,payload) VALUES($1,'update','seo_local_review',$2,$3::jsonb)`, [request.dashboardUser.id, id, JSON.stringify(b)]);
   response.json({ ok: true, id });
 }));
 
-app.post('/api/v1/admin/reviews/:id/moderate', requireDashboardUser, requirePermission('reviews.moderate', 'reviews.own.respond'), asyncRoute(async (request, response) => {
-  const id = Number(request.params.id); const action = String(request.body?.action || '');
-  const statusMap = { approve: 'published', reject: 'rejected', hide: 'hidden', report: 'reported', pending: 'pending' };
-  const status = statusMap[action] || request.body?.status;
-  await pool.query(`UPDATE seo_local_review SET status=COALESCE($2,status), agency_response=COALESCE($3,agency_response), write_date=NOW() WHERE id=$1`, [id, status, request.body?.agency_response]);
-  response.json({ ok: true, id, status });
-}));
-
-app.get('/api/v1/admin/plans', requireDashboardUser, requirePermission('plans.read'), asyncRoute(async (_request, response) => {
+app.get('/api/v1/admin/plans', requireDashboardUser, asyncRoute(async (_request, response) => {
   const result = await pool.query(`SELECT id, external_id, name, plan_code, description, monthly_price, currency_code, max_services, max_leads, featured_listing, verified_badge, support_level, active, write_date FROM seo_local_subscription_plan ORDER BY monthly_price, id`);
   response.json({ items: result.rows.map((row) => ({ ...row, monthly_price: Number(row.monthly_price) })) });
 }));
 
-app.post('/api/v1/admin/plans', requireDashboardUser, requirePermission('plans.manage'), asyncRoute(async (request, response) => {
-  const b = request.body || {}; const code = normalizeDashboardSlug(b.plan_code || b.name);
-  const result = await pool.query(`INSERT INTO seo_local_subscription_plan(external_id,name,plan_code,description,monthly_price,currency_code,max_services,max_leads,featured_listing,verified_badge,support_level,active) VALUES($1,$2,$3,COALESCE($4,''),COALESCE($5,0),COALESCE($6,'USD'),COALESCE($7,0),COALESCE($8,0),COALESCE($9,FALSE),COALESCE($10,FALSE),COALESCE($11,'standard'),COALESCE($12,TRUE)) RETURNING id`, [`plan-${code}`, b.name || 'Nuevo plan', code, b.description, normalizeDashboardNumber(b.monthly_price,0), b.currency_code || 'USD', normalizeDashboardNumber(b.max_services,0), normalizeDashboardNumber(b.max_leads,0), b.featured_listing, b.verified_badge, b.support_level, b.active]);
-  response.json({ ok: true, id: result.rows[0].id });
-}));
-
-app.put('/api/v1/admin/plans/:id', requireDashboardUser, requirePermission('plans.manage'), asyncRoute(async (request, response) => {
+app.put('/api/v1/admin/plans/:id', requireDashboardUser, requireDashboardRole('superadmin', 'admin'), asyncRoute(async (request, response) => {
   const id = Number(request.params.id); const b = request.body || {};
-  await pool.query(`UPDATE seo_local_subscription_plan SET name=COALESCE($2,name), plan_code=COALESCE($3,plan_code), description=COALESCE($4,description), monthly_price=COALESCE($5,monthly_price), currency_code=COALESCE($6,currency_code), max_services=COALESCE($7,max_services), max_leads=COALESCE($8,max_leads), featured_listing=COALESCE($9,featured_listing), verified_badge=COALESCE($10,verified_badge), support_level=COALESCE($11,support_level), active=COALESCE($12,active), write_date=NOW() WHERE id=$1`, [id, b.name, b.plan_code, b.description, normalizeDashboardNumber(b.monthly_price), b.currency_code, normalizeDashboardNumber(b.max_services), normalizeDashboardNumber(b.max_leads), b.featured_listing, b.verified_badge, b.support_level, b.active]);
+  await pool.query(`UPDATE seo_local_subscription_plan SET name=COALESCE($2,name), description=COALESCE($3,description), monthly_price=COALESCE($4,monthly_price), currency_code=COALESCE($5,currency_code), max_services=COALESCE($6,max_services), max_leads=COALESCE($7,max_leads), featured_listing=COALESCE($8,featured_listing), verified_badge=COALESCE($9,verified_badge), support_level=COALESCE($10,support_level), active=COALESCE($11,active), write_date=NOW() WHERE id=$1`, [id, b.name, b.description, b.monthly_price, b.currency_code, b.max_services, b.max_leads, b.featured_listing, b.verified_badge, b.support_level, b.active]);
+  await pool.query(`INSERT INTO seo_local_dashboard_audit_log(user_id,action,model,res_id,payload) VALUES($1,'update','seo_local_subscription_plan',$2,$3::jsonb)`, [request.dashboardUser.id, id, JSON.stringify(b)]);
   response.json({ ok: true, id });
 }));
 
-app.get('/api/v1/admin/subscriptions', requireDashboardUser, requirePermission('plans.read'), asyncRoute(async (_request, response) => {
-  const result = await pool.query(`
-    SELECT s.id, s.agency_partner_id, ag.name AS agency_name, s.plan_id, p.name AS plan_name, s.status, s.starts_at, s.ends_at, s.notes, s.write_date
-    FROM seo_local_agency_subscription s
-    JOIN res_partner ag ON ag.id=s.agency_partner_id
-    JOIN seo_local_subscription_plan p ON p.id=s.plan_id
-    ORDER BY s.write_date DESC, s.id DESC
-  `);
-  response.json({ items: result.rows });
-}));
-
-app.post('/api/v1/admin/subscriptions', requireDashboardUser, requirePermission('plans.manage'), asyncRoute(async (request, response) => {
-  const b = request.body || {};
-  const result = await pool.query(`
-    INSERT INTO seo_local_agency_subscription(agency_partner_id, plan_id, status, starts_at, ends_at, assigned_by_user_id, notes)
-    VALUES($1,$2,COALESCE($3,'active'),COALESCE($4,CURRENT_DATE),NULLIF($5,'')::date,$6,COALESCE($7,''))
-    RETURNING id
-  `, [normalizeDashboardNumber(b.agency_partner_id), normalizeDashboardNumber(b.plan_id), b.status, b.starts_at, b.ends_at, request.dashboardUser.id, b.notes]);
-  response.json({ ok: true, id: result.rows[0].id });
-}));
-
-app.put('/api/v1/admin/subscriptions/:id', requireDashboardUser, requirePermission('plans.manage'), asyncRoute(async (request, response) => {
-  const id = Number(request.params.id); const b = request.body || {};
-  await pool.query(`UPDATE seo_local_agency_subscription SET status=COALESCE($2,status), starts_at=COALESCE($3,starts_at), ends_at=NULLIF($4,'')::date, notes=COALESCE($5,notes), write_date=NOW() WHERE id=$1`, [id, b.status, b.starts_at, b.ends_at, b.notes]);
-  response.json({ ok: true, id });
-}));
-
-app.get('/api/v1/admin/categories', requireDashboardUser, requirePermission('categories.read'), asyncRoute(async (_request, response) => {
-  const result = await pool.query(`SELECT id, external_id, name, slug, description, query_name, services_count, sequence, active, write_date FROM seo_local_category ORDER BY sequence, name`);
-  response.json({ items: result.rows });
-}));
-
-app.post('/api/v1/admin/categories', requireDashboardUser, requirePermission('categories.manage'), asyncRoute(async (request, response) => {
-  const b = request.body || {}; const slug = normalizeDashboardSlug(b.slug || b.name);
-  const result = await pool.query(`INSERT INTO seo_local_category(external_id,name,slug,description,query_name,services_count,sequence,active) VALUES($1,$2,$3,COALESCE($4,''),COALESCE($5,$2),COALESCE($6,0),COALESCE($7,10),COALESCE($8,TRUE)) RETURNING id`, [`cat-${slug}`, b.name || 'Nueva categoría', slug, b.description, b.query_name, normalizeDashboardNumber(b.services_count,0), normalizeDashboardNumber(b.sequence,10), b.active]);
-  response.json({ ok: true, id: result.rows[0].id });
-}));
-
-app.put('/api/v1/admin/categories/:id', requireDashboardUser, requirePermission('categories.manage'), asyncRoute(async (request, response) => {
-  const id = Number(request.params.id); const b = request.body || {};
-  await pool.query(`UPDATE seo_local_category SET name=COALESCE($2,name), slug=COALESCE($3,slug), description=COALESCE($4,description), query_name=COALESCE($5,query_name), services_count=COALESCE($6,services_count), sequence=COALESCE($7,sequence), active=COALESCE($8,active), write_date=NOW() WHERE id=$1`, [id, b.name, b.slug, b.description, b.query_name, normalizeDashboardNumber(b.services_count), normalizeDashboardNumber(b.sequence), b.active]);
-  response.json({ ok: true, id });
-}));
-
-app.get('/api/v1/admin/activity', requireDashboardUser, requirePermission('audit.read'), asyncRoute(async (_request, response) => {
+app.get('/api/v1/admin/activity', requireDashboardUser, asyncRoute(async (_request, response) => {
   const result = await pool.query(`
     SELECT l.id, l.action, l.model, l.res_id, l.payload, l.create_date, u.login AS user_login
     FROM seo_local_dashboard_audit_log l
     LEFT JOIN res_users u ON u.id = l.user_id
     ORDER BY l.create_date DESC, l.id DESC
-    LIMIT 300
+    LIMIT 200
   `);
   response.json({ items: result.rows });
 }));
 
-
-
-app.get('/api/v1/admin/diagnostic/ping', (_request, response) => {
-  response.json({
-    ok: true,
-    marker: 'DASHBOARD_CORS_DIAGNOSTIC_V5_26_3',
-    service: 'seo-local-api',
-    timestamp: new Date().toISOString(),
-  });
-});
 
 app.use((_request, response) => {
   response.status(404).json({ error: 'Recurso no encontrado.' });

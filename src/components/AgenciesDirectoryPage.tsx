@@ -62,6 +62,9 @@ const getBadgeClasses = (certification: string) => {
 
 const getCity = (agency: Agency) => agency.city || agency.location.split(',')[0] || 'Ciudad no definida';
 
+const isAgencyOnVacation = (agency: Agency) => agency.status === 'review' || agency.isOnVacation === true;
+const isAgencySuspended = (agency: Agency) => agency.status === 'suspended';
+
 const starRow = (rating: number) => (
   <span className="inline-flex items-center gap-0.5 text-amber-400" aria-label={`Calificación ${rating}`}>
     {Array.from({ length: 5 }).map((_, index) => (
@@ -111,6 +114,7 @@ export default function AgenciesDirectoryPage({
     const selectedModes = workModeOptions.filter((mode) => workModes[mode]);
     return agencies
       .filter((agency) => {
+        if (isAgencySuspended(agency)) return false;
         const haystack = normalize([
           agency.name,
           agency.location,
@@ -400,6 +404,11 @@ export default function AgenciesDirectoryPage({
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <h3 className="font-black text-[#333] text-base leading-tight flex items-center gap-1">{agency.name} {agency.isVerified && <BadgeCheck className="w-4 h-4 text-[#0074E0]" />}</h3>
+                            {isAgencyOnVacation(agency) && (
+                              <div className="mt-1 inline-flex rounded-full bg-amber-50 border border-amber-200 px-2.5 py-1 text-[10px] font-black text-amber-700">
+                                Agencia en pausa / vacaciones
+                              </div>
+                            )}
                             <div className="mt-1 flex flex-wrap items-center gap-1.5">
                               <span className="text-xs font-black text-[#333]">{agency.rating.toFixed(1)}</span>
                               {starRow(agency.rating)}

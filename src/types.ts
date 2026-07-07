@@ -38,6 +38,9 @@ export interface Agency {
   budgetMax?: number;
   audited?: boolean;
   profileCompleteness?: number;
+  status?: 'published' | 'review' | 'suspended' | 'draft' | string;
+  isOnVacation?: boolean;
+  availabilityLabel?: string;
 }
 
 export interface Service {

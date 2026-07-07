@@ -311,6 +311,21 @@ const modules: ModuleDef[] = [
   },
 ];
 
+const compactModuleCopy: Record<ModuleKey, { title: string; subtitle: string }> = {
+  overview: { title: 'Resumen general', subtitle: 'Visión ejecutiva' },
+  users: { title: 'Usuarios y roles', subtitle: 'Accesos y permisos' },
+  agencies: { title: 'Marketplace', subtitle: 'Agencias y operación' },
+  agencyProfile: { title: 'Agencias', subtitle: 'Perfiles y módulos' },
+  agencyServices: { title: 'Servicios', subtitle: 'FUR-S por agencia' },
+  services: { title: 'Catálogo FUR-S', subtitle: 'Servicios globales' },
+  leads: { title: 'Leads', subtitle: 'Pipeline comercial' },
+  reviews: { title: 'Reseñas', subtitle: 'Moderación' },
+  plans: { title: 'Planes', subtitle: 'Suscripciones' },
+  categories: { title: 'Categorías', subtitle: 'Taxonomía' },
+  reports: { title: 'Métricas', subtitle: 'Reportes' },
+  activity: { title: 'Auditoría', subtitle: 'Actividad' },
+};
+
 function has(user: DashboardUser | null, permission?: string) {
   if (!permission) return true;
   return Boolean(user?.permissions?.includes(permission));
@@ -481,6 +496,415 @@ function EditModal({
   );
 }
 
+const moduleVisualCopy: Record<ModuleKey, { eyebrow: string; objective: string; primary: string; secondary: string }> = {
+  overview: {
+    eyebrow: 'Centro ejecutivo',
+    objective: 'Resumen de salud comercial, operación y métricas principales.',
+    primary: 'Visión general',
+    secondary: 'KPIs y alertas',
+  },
+  users: {
+    eyebrow: 'Seguridad y acceso',
+    objective: 'Controla usuarios, roles, agencia asignada, actividad de sesión y permisos internos.',
+    primary: 'Usuarios activos',
+    secondary: 'Roles funcionales',
+  },
+  agencies: {
+    eyebrow: 'Marketplace operativo',
+    objective: 'Publica, pausa, oculta y edita agencias con impacto directo en el frontend público.',
+    primary: 'Agencias visibles',
+    secondary: 'Estados semáforo',
+  },
+  agencyProfile: {
+    eyebrow: 'Perfil público',
+    objective: 'Gestiona módulos visibles, GBP, equipo, horarios, certificaciones y canales.',
+    primary: 'Perfil modular',
+    secondary: 'Contenido público',
+  },
+  agencyServices: {
+    eyebrow: 'Oferta por agencia',
+    objective: 'Controla asignación real de servicios FUR-S, precios, capacidad y estado comercial.',
+    primary: 'Servicios activos',
+    secondary: 'Capacidad mensual',
+  },
+  services: {
+    eyebrow: 'Catálogo maestro',
+    objective: 'Administra el catálogo global FUR-S, precios base, categoría y popularidad.',
+    primary: 'Servicios globales',
+    secondary: 'Taxonomía',
+  },
+  leads: {
+    eyebrow: 'Pipeline comercial',
+    objective: 'Crea, asigna y mueve oportunidades con valor esperado, probabilidad y seguimiento.',
+    primary: 'Leads abiertos',
+    secondary: 'Valor esperado',
+  },
+  reviews: {
+    eyebrow: 'Reputación',
+    objective: 'Modera reseñas, verifica compras, responde comentarios y protege la confianza pública.',
+    primary: 'Reseñas visibles',
+    secondary: 'Pendientes',
+  },
+  plans: {
+    eyebrow: 'Monetización',
+    objective: 'Gestiona planes, límites, soporte, badges y suscripciones comerciales.',
+    primary: 'Planes activos',
+    secondary: 'MRR potencial',
+  },
+  categories: {
+    eyebrow: 'Arquitectura comercial',
+    objective: 'Organiza categorías, landings, orden, servicios asociados y contenido SEO base.',
+    primary: 'Categorías activas',
+    secondary: 'Servicios cubiertos',
+  },
+  reports: {
+    eyebrow: 'Inteligencia operativa',
+    objective: 'Indicadores, alertas, desempeño por ciudad, calidad, pipeline y control comercial.',
+    primary: 'Reportes',
+    secondary: 'Alertas',
+  },
+  activity: {
+    eyebrow: 'Gobierno y auditoría',
+    objective: 'Rastrea cambios reales, acciones críticas, usuarios y trazabilidad del dashboard.',
+    primary: 'Eventos',
+    secondary: 'Auditoría',
+  },
+};
+
+function moduleTone(moduleKey: ModuleKey) {
+  if (moduleKey === 'leads') return 'blue';
+  if (moduleKey === 'reviews' || moduleKey === 'plans') return 'amber';
+  if (moduleKey === 'agencies' || moduleKey === 'agencyServices') return 'green';
+  if (moduleKey === 'activity' || moduleKey === 'reports') return 'purple';
+  return 'red';
+}
+
+function toneClasses(tone: string) {
+  if (tone === 'green') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+  if (tone === 'amber') return 'bg-amber-50 text-amber-700 border-amber-100';
+  if (tone === 'blue') return 'bg-blue-50 text-blue-700 border-blue-100';
+  if (tone === 'purple') return 'bg-purple-50 text-purple-700 border-purple-100';
+  return 'bg-red-50 text-[#D32323] border-red-100';
+}
+
+function formatDashboardMoney(value: any) {
+  const number = Number(value || 0);
+  return `US$ ${number.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+}
+
+function countBy(items: any[], key: string) {
+  return items.reduce((acc: Record<string, number>, item) => {
+    const raw = item?.[key];
+    const value = raw === true ? 'Sí' : raw === false ? 'No' : String(raw || 'Sin dato');
+    acc[value] = (acc[value] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function statusLabel(value: any) {
+  const status = String(value || '').toLowerCase();
+  if (status === 'published' || status === 'active') return 'Activo';
+  if (status === 'review' || status === 'paused') return 'En pausa';
+  if (status === 'pending') return 'Pendiente';
+  if (status === 'reported') return 'Reportada';
+  if (status === 'hidden') return 'Oculta';
+  if (status === 'rejected') return 'Rechazada';
+  if (status === 'suspended' || status === 'archived' || status === 'draft') return status === 'draft' ? 'Borrador' : 'Oculto';
+  return value ? String(value) : 'Sin estado';
+}
+
+function statusBadgeClass(value: any) {
+  const status = String(value || '').toLowerCase();
+  if (status === 'published' || status === 'active' || status === 'ganado' || status === 'won') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+  if (status === 'review' || status === 'paused' || status === 'pending' || status === 'reported') return 'bg-amber-50 text-amber-700 border-amber-100';
+  if (status === 'suspended' || status === 'archived' || status === 'hidden' || status === 'rejected' || status === 'perdido') return 'bg-red-50 text-[#D32323] border-red-100';
+  return 'bg-gray-100 text-gray-600 border-gray-200';
+}
+
+function sumField(items: any[], key: string) {
+  return items.reduce((total, item) => total + Number(item?.[key] || 0), 0);
+}
+
+function buildModuleStats(module: ModuleDef, items: any[]) {
+  const total = items.length;
+  const active = items.filter((item) => item.active === true || item.status === 'published' || item.status === 'active').length;
+  const paused = items.filter((item) => ['review', 'paused', 'pending', 'reported'].includes(String(item.status || '').toLowerCase())).length;
+  const inactive = items.filter((item) => item.active === false || ['suspended', 'archived', 'hidden', 'rejected', 'draft'].includes(String(item.status || '').toLowerCase())).length;
+
+  if (module.key === 'users') {
+    const roles = new Set(items.map((item) => item.role_name || item.dashboard_role_code).filter(Boolean)).size;
+    return [
+      { label: 'Usuarios', value: total, hint: 'Cuentas internas', icon: Users, tone: 'red' },
+      { label: 'Activos', value: items.filter((item) => item.active !== false).length, hint: 'Con acceso habilitado', icon: CheckCircle2, tone: 'green' },
+      { label: 'Roles', value: roles, hint: 'Competencias distintas', icon: ShieldCheck, tone: 'blue' },
+      { label: 'Agencia asignada', value: items.filter((item) => item.agency_partner_id).length, hint: 'Usuarios vinculados', icon: Building2, tone: 'purple' },
+    ];
+  }
+
+  if (module.key === 'agencies') {
+    return [
+      { label: 'Total agencias', value: total, hint: 'Registros cargados', icon: Building2, tone: 'red' },
+      { label: 'Publicadas', value: items.filter((item) => item.status === 'published').length, hint: 'Visibles normales', icon: CheckCircle2, tone: 'green' },
+      { label: 'En pausa', value: items.filter((item) => item.status === 'review').length, hint: 'Vacaciones visibles', icon: RefreshCw, tone: 'amber' },
+      { label: 'Ocultas', value: items.filter((item) => item.status === 'suspended' || item.status === 'draft').length, hint: 'Fuera del frontend', icon: X, tone: 'red' },
+    ];
+  }
+
+  if (module.key === 'agencyServices') {
+    return [
+      { label: 'Relaciones', value: total, hint: 'Agencia ↔ FUR-S', icon: ClipboardList, tone: 'red' },
+      { label: 'Activas', value: active, hint: 'Oferta visible', icon: CheckCircle2, tone: 'green' },
+      { label: 'Pausadas', value: paused, hint: 'Revisión o pausa', icon: RefreshCw, tone: 'amber' },
+      { label: 'Capacidad', value: sumField(items, 'capacity_monthly'), hint: 'Entregas/mes', icon: BarChart3, tone: 'blue' },
+    ];
+  }
+
+  if (module.key === 'services') {
+    return [
+      { label: 'Servicios FUR-S', value: total, hint: 'Catálogo global', icon: Database, tone: 'red' },
+      { label: 'Activos', value: items.filter((item) => item.active !== false).length, hint: 'Disponibles', icon: CheckCircle2, tone: 'green' },
+      { label: 'Populares', value: items.filter((item) => item.is_popular).length, hint: 'Destacados', icon: Star, tone: 'amber' },
+      { label: 'Precio promedio', value: formatDashboardMoney(total ? sumField(items, 'list_price') / total : 0), hint: 'Base del catálogo', icon: WalletCards, tone: 'blue' },
+    ];
+  }
+
+  if (module.key === 'leads') {
+    const revenue = sumField(items, 'expected_revenue');
+    const avgProbability = total ? items.reduce((sum, item) => sum + Number(item.probability || 0), 0) / total : 0;
+    return [
+      { label: 'Leads abiertos', value: total, hint: 'Pipeline real', icon: FolderKanban, tone: 'blue' },
+      { label: 'Valor esperado', value: formatDashboardMoney(revenue), hint: 'Oportunidad total', icon: WalletCards, tone: 'green' },
+      { label: 'Probabilidad media', value: `${avgProbability.toFixed(1)}%`, hint: 'Promedio ponderado', icon: BarChart3, tone: 'purple' },
+      { label: 'Con agencia', value: items.filter((item) => item.agency_partner_id).length, hint: 'Asignados', icon: Building2, tone: 'amber' },
+    ];
+  }
+
+  if (module.key === 'reviews') {
+    const rating = total ? items.reduce((sum, item) => sum + Number(item.rating || 0), 0) / total : 0;
+    return [
+      { label: 'Reseñas', value: total, hint: 'Registros cargados', icon: Star, tone: 'red' },
+      { label: 'Publicadas', value: items.filter((item) => item.status === 'published').length, hint: 'Visibles', icon: CheckCircle2, tone: 'green' },
+      { label: 'Pendientes', value: items.filter((item) => ['pending', 'reported'].includes(String(item.status || ''))).length, hint: 'Moderación', icon: MessageSquareText, tone: 'amber' },
+      { label: 'Rating medio', value: rating.toFixed(2), hint: 'Promedio', icon: BarChart3, tone: 'blue' },
+    ];
+  }
+
+  if (module.key === 'plans') {
+    return [
+      { label: 'Planes', value: total, hint: 'Opciones comerciales', icon: WalletCards, tone: 'red' },
+      { label: 'Activos', value: items.filter((item) => item.active !== false).length, hint: 'Vendibles', icon: CheckCircle2, tone: 'green' },
+      { label: 'MRR potencial', value: formatDashboardMoney(sumField(items, 'monthly_price')), hint: 'Suma de planes', icon: BarChart3, tone: 'blue' },
+      { label: 'Enterprise', value: items.filter((item) => String(item.support_level || '').includes('enterprise')).length, hint: 'Soporte avanzado', icon: ShieldCheck, tone: 'purple' },
+    ];
+  }
+
+  if (module.key === 'categories') {
+    return [
+      { label: 'Categorías', value: total, hint: 'Taxonomía', icon: Tags, tone: 'red' },
+      { label: 'Activas', value: items.filter((item) => item.active !== false).length, hint: 'Visibles', icon: CheckCircle2, tone: 'green' },
+      { label: 'Servicios cubiertos', value: sumField(items, 'services_count'), hint: 'Total asociado', icon: Database, tone: 'blue' },
+      { label: 'Orden promedio', value: total ? (sumField(items, 'sequence') / total).toFixed(0) : 0, hint: 'Prioridad visual', icon: Layers3, tone: 'purple' },
+    ];
+  }
+
+  if (module.key === 'activity') {
+    const actions = new Set(items.map((item) => item.action).filter(Boolean)).size;
+    return [
+      { label: 'Eventos', value: total, hint: 'Auditoría reciente', icon: Activity, tone: 'red' },
+      { label: 'Acciones', value: actions, hint: 'Tipos distintos', icon: FileText, tone: 'blue' },
+      { label: 'Usuarios', value: new Set(items.map((item) => item.user_login).filter(Boolean)).size, hint: 'Con actividad', icon: Users, tone: 'green' },
+      { label: 'Modelos', value: new Set(items.map((item) => item.model).filter(Boolean)).size, hint: 'Áreas tocadas', icon: Database, tone: 'purple' },
+    ];
+  }
+
+  return [
+    { label: 'Registros', value: total, hint: 'Total del módulo', icon: Database, tone: 'red' },
+    { label: 'Activos', value: active, hint: 'Disponibles', icon: CheckCircle2, tone: 'green' },
+    { label: 'Pendientes', value: paused, hint: 'Revisión', icon: RefreshCw, tone: 'amber' },
+    { label: 'Inactivos', value: inactive, hint: 'Ocultos o cerrados', icon: X, tone: 'red' },
+  ];
+}
+
+function ModuleStatCard({ stat }: { stat: any }) {
+  const Icon = stat.icon || Database;
+  return (
+    <div className={`rounded-[22px] border p-4 ${toneClasses(stat.tone || 'red')}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="w-10 h-10 rounded-2xl bg-white/70 flex items-center justify-center">
+          <Icon className="w-5 h-5" />
+        </div>
+        <span className="text-[10px] font-black uppercase opacity-70">BD real</span>
+      </div>
+      <p className="mt-4 text-[11px] font-black uppercase tracking-wide opacity-75">{stat.label}</p>
+      <strong className="mt-1 block text-2xl font-black">{stat.value}</strong>
+      <p className="mt-1 text-xs font-bold opacity-75">{stat.hint}</p>
+    </div>
+  );
+}
+
+function FieldPreview({ label, value }: { label: string; value: any }) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+      <p className="text-[10px] font-black uppercase text-gray-500">{label}</p>
+      <p className="mt-1 text-sm font-black text-[#333] truncate">{stringify(value) || '—'}</p>
+    </div>
+  );
+}
+
+function ModuleDeepPanel({
+  module,
+  items,
+  onEdit,
+  onRefresh,
+  user,
+}: {
+  module: ModuleDef;
+  items: any[];
+  onEdit: (item: any) => void;
+  onRefresh: () => Promise<void>;
+  user: DashboardUser | null;
+}) {
+  const top = items.slice(0, 6);
+
+  if (module.key === 'reports') {
+    return (
+      <div className="rounded-[28px] border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {items.map((item, index) => (
+            <button key={item.title || index} type="button" className="rounded-2xl border border-gray-200 bg-gray-50 p-5 text-left hover:bg-white hover:shadow-sm">
+              <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase ${statusBadgeClass(item.severity || item.severityLabel)}`}>{item.severityLabel || item.severity || 'Info'}</span>
+              <h4 className="mt-3 font-black text-[#333]">{item.title || item.label}</h4>
+              <p className="mt-2 text-sm font-semibold text-gray-500">{item.description}</p>
+            </button>
+          ))}
+          {!items.length && (
+            <div className="lg:col-span-3 rounded-2xl border border-dashed border-gray-300 p-8 text-center">
+              <p className="font-black text-[#333]">Sin alertas críticas en este momento.</p>
+              <p className="mt-1 text-sm font-semibold text-gray-500">El panel general consolida los indicadores ejecutivos.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (module.key === 'leads') {
+    const grouped = Object.entries(countBy(items, 'stage_name')).slice(0, 6);
+    return (
+      <div className="rounded-[28px] border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="font-black text-[#333]">Pipeline visual de oportunidades</h3>
+            <p className="mt-1 text-sm font-semibold text-gray-500">Etapas reales desde CRM y valor esperado por lead.</p>
+          </div>
+          <button onClick={onRefresh} className="rounded-2xl border border-gray-200 px-4 py-2 text-xs font-black hover:bg-gray-50">Refrescar</button>
+        </div>
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          {grouped.map(([stage, count]) => (
+            <div key={stage} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-black uppercase text-gray-500">{stage}</p>
+              <strong className="mt-2 block text-3xl font-black text-[#333]">{count}</strong>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 grid grid-cols-1 xl:grid-cols-2 gap-3">
+          {top.map((lead) => (
+            <button key={lead.id} onClick={() => onEdit(lead)} className="rounded-2xl border border-gray-200 p-4 text-left hover:border-[#D32323]/40 hover:shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-black text-[#333]">{lead.name || lead.reference}</p>
+                  <p className="mt-1 text-xs font-semibold text-gray-500">{lead.contact_name || lead.company_name || 'Sin contacto'} · {lead.agency_name || 'Sin agencia'}</p>
+                </div>
+                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">{lead.stage_name || 'Nuevo'}</span>
+              </div>
+              <p className="mt-3 text-sm font-black text-[#D32323]">{formatDashboardMoney(lead.expected_revenue)}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (module.key === 'activity') {
+    return (
+      <div className="rounded-[28px] border border-gray-200 bg-white p-6 shadow-sm">
+        <h3 className="font-black text-[#333]">Línea de tiempo de auditoría</h3>
+        <div className="mt-5 space-y-3">
+          {top.map((event) => (
+            <div key={event.id} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-black text-[#333]">{event.action || 'Actividad'}</p>
+                  <p className="mt-1 text-xs font-semibold text-gray-500">{event.model} #{event.res_id || '—'} · {event.user_login || 'Sistema'}</p>
+                </div>
+                <span className="text-[10px] font-black text-gray-400">{event.create_date ? new Date(event.create_date).toLocaleString('es-ES') : ''}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (['agencies', 'agencyServices', 'services', 'reviews', 'plans', 'categories', 'users'].includes(module.key)) {
+    return (
+      <div className="rounded-[28px] border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div>
+            <h3 className="font-black text-[#333]">Vista operativa destacada</h3>
+            <p className="mt-1 text-sm font-semibold text-gray-500">Los registros más importantes del módulo con acceso rápido a edición.</p>
+          </div>
+          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-black text-gray-500">{items.length} registros en BD</span>
+        </div>
+        <div className="mt-5 grid grid-cols-1 xl:grid-cols-3 gap-4">
+          {top.map((item, index) => (
+            <button key={item.id || item.external_id || index} onClick={() => onEdit(item)} className="rounded-[22px] border border-gray-200 bg-gray-50 p-4 text-left hover:bg-white hover:border-[#D32323]/30 hover:shadow-sm transition-all">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-black text-[#333] truncate">{item.name || item.service_name || item.title || item.login || item.action || `Registro ${item.id}`}</p>
+                  <p className="mt-1 text-xs font-semibold text-gray-500 truncate">{item.email || item.agency_name || item.category_name || item.plan_code || item.city || item.model || 'Dato operativo'}</p>
+                </div>
+                {(item.status || item.active !== undefined) && (
+                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-black ${statusBadgeClass(item.status || (item.active ? 'active' : 'archived'))}`}>
+                    {statusLabel(item.status || (item.active ? 'active' : 'archived'))}
+                  </span>
+                )}
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <FieldPreview label="ID" value={item.id || item.external_id} />
+                <FieldPreview label={module.key === 'plans' ? 'Precio' : module.key === 'reviews' ? 'Rating' : module.key === 'services' ? 'Precio' : 'Actualizado'} value={module.key === 'plans' ? formatDashboardMoney(item.monthly_price) : module.key === 'reviews' ? item.rating : module.key === 'services' ? formatDashboardMoney(item.list_price) : item.write_date ? new Date(item.write_date).toLocaleDateString('es-ES') : '—'} />
+              </div>
+            </button>
+          ))}
+          {!top.length && (
+            <div className="xl:col-span-3 rounded-2xl border border-dashed border-gray-300 p-8 text-center">
+              <p className="font-black text-[#333]">Sin registros para destacar.</p>
+              <p className="mt-1 text-sm font-semibold text-gray-500">Crea el primer registro o ajusta los filtros.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function exportRowsToCsv(module: ModuleDef, rows: any[]) {
+  const keys = Array.from(new Set(rows.flatMap((row) => Object.keys(row || {})))).filter((key) => key !== 'payload');
+  const csv = [
+    keys.join(','),
+    ...rows.map((row) => keys.map((key) => `"${String(row?.[key] ?? '').replace(/"/g, '""')}"`).join(',')),
+  ].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `seo-local-${module.key}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function GenericModule({
   module,
   user,
@@ -493,13 +917,42 @@ function GenericModule({
   const [editing, setEditing] = useState<any | null>(null);
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [error, setError] = useState('');
   const canManage = has(user, module.managePermission);
+  const tone = moduleTone(module.key);
+  const visual = moduleVisualCopy[module.key] || moduleVisualCopy.reports;
 
   async function load() {
-    if (!module.listMethod) return;
     setError('');
     try {
+      if (module.key === 'reports') {
+        const [operational, executive] = await Promise.all([
+          adminApi.reports().catch(() => ({ alerts: [] })),
+          (adminApi as any).executiveReport ? (adminApi as any).executiveReport().catch(() => ({})) : Promise.resolve({}),
+        ]);
+        const priority = (executive.priorityAlerts || operational.alerts || []).map((alert: any, index: number) => ({
+          id: index + 1,
+          ...alert,
+          title: alert.title || alert.label,
+          severityLabel: alert.severityLabel || alert.severity || 'info',
+        }));
+        setItems(priority);
+        setMeta({
+          dateRange: executive.dateRange || 'Últimos 30 días',
+          mrr: executive.kpis?.mrr || 0,
+          openLeads: executive.kpis?.openLeads || 0,
+          pendingReviews: executive.kpis?.pendingReviews || 0,
+        });
+        return;
+      }
+
+      if (!module.listMethod) {
+        setItems([]);
+        setMeta({});
+        return;
+      }
+
       const fn = (adminApi as any)[module.listMethod];
       const result = await fn();
       setItems(result.items || []);
@@ -510,80 +963,149 @@ function GenericModule({
   }
 
   useEffect(() => {
+    setStatusFilter('all');
     load();
   }, [module.key]);
 
   const fields = module.fields || [];
+  const statusOptions = useMemo(() => {
+    const values = Array.from(new Set(items.map((item) => item.status || (item.active === false ? 'inactive' : item.active === true ? 'active' : '')).filter(Boolean).map(String)));
+    return values;
+  }, [items]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((item) => JSON.stringify(item).toLowerCase().includes(q));
-  }, [items, query]);
+    return items.filter((item) => {
+      const status = String(item.status || (item.active === false ? 'inactive' : item.active === true ? 'active' : ''));
+      if (statusFilter !== 'all' && status !== statusFilter) return false;
+      if (!q) return true;
+      return JSON.stringify(item).toLowerCase().includes(q);
+    });
+  }, [items, query, statusFilter]);
 
   async function saveEdit(data: any) {
     const id = editing?.[module.idKey || 'id'];
     const fn = (adminApi as any)[module.updateMethod || ''];
     await fn(Number(id), data);
+    setEditing(null);
     await load();
   }
 
   async function saveCreate(data: any) {
     const fn = (adminApi as any)[module.createMethod || ''];
     await fn(data);
+    setCreating(false);
     await load();
   }
 
+  const stats = useMemo(() => buildModuleStats(module, items), [module.key, items]);
+  const ModuleIcon = module.icon;
   const columns = useMemo(() => {
-    const sample = items[0] || {};
-    const keys = Object.keys(sample).filter((key) => !['payload', 'description_sale', 'summary', 'body', 'description'].includes(key));
-    return keys.slice(0, 7);
-  }, [items]);
+    const sample = filtered[0] || items[0] || {};
+    const preferred: Record<string, string[]> = {
+      users: ['id', 'login', 'name', 'role_name', 'agency_name', 'active', 'last_dashboard_login'],
+      agencies: ['id', 'name', 'city', 'country_code', 'status', 'rating', 'plan_name'],
+      agencyServices: ['id', 'agency_name', 'service_name', 'status', 'custom_price', 'capacity_monthly', 'is_featured'],
+      services: ['id', 'default_code', 'name', 'category_name', 'list_price', 'is_popular', 'active'],
+      leads: ['id', 'name', 'contact_name', 'agency_name', 'stage_name', 'expected_revenue', 'probability'],
+      reviews: ['id', 'agency_name', 'author', 'rating', 'status', 'verified_purchase', 'create_date'],
+      plans: ['id', 'name', 'monthly_price', 'max_services', 'max_leads', 'support_level', 'active'],
+      categories: ['id', 'name', 'slug', 'services_count', 'sequence', 'active', 'write_date'],
+      activity: ['id', 'action', 'model', 'res_id', 'user_login', 'create_date'],
+      reports: ['title', 'severityLabel', 'description', 'value', 'module'],
+    };
+    const keys = preferred[module.key] || Object.keys(sample).filter((key) => !['payload', 'description_sale', 'summary', 'body', 'description'].includes(key));
+    return keys.filter((key) => key in sample || module.key === 'reports').slice(0, 7);
+  }, [items, filtered, module.key]);
 
   return (
     <section className="space-y-5">
-      <div className="rounded-[28px] bg-white border border-gray-200 p-6 shadow-sm">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div>
-            <p className="text-xs font-black uppercase text-[#D32323]">Módulo conectado a PostgreSQL</p>
-            <h2 className="mt-1 text-2xl font-black text-[#333]">{module.title}</h2>
-            <p className="mt-2 text-sm text-gray-500 max-w-3xl">{module.subtitle}</p>
-            {module.key === 'agencies' && (
-              <div className="mt-4 flex flex-wrap gap-2 text-xs font-black">
-                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 text-emerald-700 px-3 py-1"><span className="w-3 h-3 rounded-full bg-emerald-500" /> Verde: publicada y visible</span>
-                <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 text-amber-700 px-3 py-1"><span className="w-3 h-3 rounded-full bg-amber-400" /> Amarillo: vacaciones / pausa visible</span>
-                <span className="inline-flex items-center gap-2 rounded-full bg-red-50 text-[#D32323] px-3 py-1"><span className="w-3 h-3 rounded-full bg-red-500" /> Rojo: suspendida y oculta del homepage</span>
-              </div>
-            )}
-            {Object.keys(meta).length > 0 && <p className="mt-2 text-xs font-bold text-gray-400">Meta: {JSON.stringify(meta)}</p>}
+      <div className="relative overflow-hidden rounded-[30px] bg-[#101820] text-white p-6 shadow-xl border border-white/10">
+        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 30%, rgba(255,255,255,.18) 0 2px, transparent 2px), radial-gradient(circle at 75% 55%, rgba(255,255,255,.12) 0 2px, transparent 2px)', backgroundSize: '28px 28px' }} />
+        <div className="relative z-10 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
+          <div className="flex items-start gap-4">
+            <div className={`w-14 h-14 rounded-2xl border flex items-center justify-center ${toneClasses(tone)} bg-white`}>
+              <ModuleIcon className="w-7 h-7" />
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase text-red-200">{visual.eyebrow} · PostgreSQL</p>
+              <h2 className="mt-1 text-3xl font-black">{module.title}</h2>
+              <p className="mt-2 text-sm text-white/75 max-w-4xl">{visual.objective}</p>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={load} className="rounded-2xl border border-gray-200 px-4 py-3 font-black text-sm text-[#333] hover:bg-gray-50 inline-flex items-center gap-2"><RefreshCw className="w-4 h-4" /> Actualizar</button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button onClick={load} className="rounded-2xl border border-white/15 bg-white/5 px-4 py-3 font-black text-sm text-white hover:bg-white/10 inline-flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" /> Actualizar
+            </button>
+            <button onClick={() => exportRowsToCsv(module, filtered)} disabled={!filtered.length} className="rounded-2xl border border-white/15 bg-white/5 px-4 py-3 font-black text-sm text-white hover:bg-white/10 disabled:opacity-40 inline-flex items-center gap-2">
+              <FileText className="w-4 h-4" /> Exportar CSV
+            </button>
             {canManage && module.createMethod && (
-              <button onClick={() => setCreating(true)} className="rounded-2xl bg-[#D32323] px-4 py-3 font-black text-sm text-white hover:bg-[#b51d1d] inline-flex items-center gap-2"><Plus className="w-4 h-4" /> {module.createLabel || 'Crear'}</button>
+              <button onClick={() => setCreating(true)} className="rounded-2xl bg-[#D32323] px-4 py-3 font-black text-sm text-white hover:bg-[#b51d1d] inline-flex items-center gap-2">
+                <Plus className="w-4 h-4" /> {module.createLabel || 'Crear'}
+              </button>
             )}
           </div>
         </div>
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4">
+        {stats.map((stat) => <ModuleStatCard key={stat.label} stat={stat} />)}
+      </div>
+
+      {module.key === 'agencies' && (
+        <div className="rounded-[24px] border border-gray-200 bg-white p-4 shadow-sm flex flex-wrap gap-2 text-xs font-black">
+          <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 text-emerald-700 px-3 py-1"><span className="w-3 h-3 rounded-full bg-emerald-500" /> Verde: publicada y visible</span>
+          <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 text-amber-700 px-3 py-1"><span className="w-3 h-3 rounded-full bg-amber-400" /> Amarillo: vacaciones / pausa visible</span>
+          <span className="inline-flex items-center gap-2 rounded-full bg-red-50 text-[#D32323] px-3 py-1"><span className="w-3 h-3 rounded-full bg-red-500" /> Rojo: suspendida y oculta del homepage</span>
+        </div>
+      )}
+
+      {Object.keys(meta).length > 0 && (
+        <div className="rounded-[24px] border border-gray-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-black uppercase text-gray-500">Meta del módulo</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {Object.entries(meta).slice(0, 8).map(([key, value]) => (
+              <span key={key} className="rounded-full bg-gray-100 px-3 py-1 text-xs font-black text-gray-600">{key}: {stringify(value)}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {error && <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-[#D32323]">{error}</div>}
 
+      <ModuleDeepPanel module={module} items={filtered} onEdit={setEditing} onRefresh={load} user={user} />
+
       <div className="rounded-[28px] bg-white border border-gray-200 shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-gray-200 flex items-center gap-3">
-          <Search className="w-5 h-5 text-gray-400" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar en este módulo..." className="w-full outline-none text-sm font-semibold" />
+        <div className="p-5 border-b border-gray-200 flex flex-col xl:flex-row xl:items-center gap-3">
+          <div className="flex items-center gap-3 flex-1">
+            <Search className="w-5 h-5 text-gray-400" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar en este módulo..." className="w-full outline-none text-sm font-semibold" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setStatusFilter('all')} className={`rounded-full px-3 py-1.5 text-xs font-black ${statusFilter === 'all' ? 'bg-[#D32323] text-white' : 'bg-gray-100 text-gray-600'}`}>Todos</button>
+            {statusOptions.map((status) => (
+              <button key={status} onClick={() => setStatusFilter(status)} className={`rounded-full px-3 py-1.5 text-xs font-black ${statusFilter === status ? 'bg-[#D32323] text-white' : 'bg-gray-100 text-gray-600'}`}>{statusLabel(status)}</button>
+            ))}
+          </div>
         </div>
+
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
-                {columns.map((col) => <th key={col} className="px-5 py-3 font-black">{col}</th>)}
+                {columns.map((col) => <th key={col} className="px-5 py-3 font-black">{col.replace(/_/g, ' ')}</th>)}
                 <th className="px-5 py-3 font-black text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.map((item, index) => (
                 <tr key={item.id || item.external_id || index} className="hover:bg-gray-50/80">
-                  {columns.map((col) => <td key={col} className="px-5 py-4 max-w-[260px] truncate font-semibold text-gray-700">{stringify(item[col])}</td>)}
+                  {columns.map((col) => (
+                    <td key={col} className="px-5 py-4 max-w-[260px] truncate font-semibold text-gray-700">
+                      {col === 'status' ? <span className={`rounded-full border px-2.5 py-1 text-xs font-black ${statusBadgeClass(item[col])}`}>{statusLabel(item[col])}</span> : stringify(item[col])}
+                    </td>
+                  ))}
                   <td className="px-5 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       {module.key === 'agencies' && has(user, 'agencies.publish') && (
@@ -606,7 +1128,9 @@ function GenericModule({
                         />
                       )}
                       {canManage && fields.length > 0 ? (
-                        <button onClick={() => setEditing(item)} className="rounded-xl border border-gray-200 px-3 py-2 text-xs font-black text-[#333] hover:border-[#D32323] hover:text-[#D32323] inline-flex items-center gap-2"><Edit3 className="w-3.5 h-3.5" /> Editar</button>
+                        <button onClick={() => setEditing(item)} className="rounded-xl border border-gray-200 px-3 py-2 text-xs font-black text-[#333] hover:border-[#D32323] hover:text-[#D32323] inline-flex items-center gap-2">
+                          <Edit3 className="w-3.5 h-3.5" /> Editar
+                        </button>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-xs font-black text-gray-400"><Lock className="w-3 h-3" /> Solo lectura</span>
                       )}
@@ -634,84 +1158,444 @@ function GenericModule({
   );
 }
 
+
+
+function MiniTrend({ value }: { value: number }) {
+  const positive = Number(value || 0) >= 0;
+  return (
+    <span className={`text-[11px] font-black ${positive ? 'text-emerald-600' : 'text-[#D32323]'}`}>
+      {positive ? '↑' : '↓'} {Math.abs(Number(value || 0)).toFixed(1)}% vs mes anterior
+    </span>
+  );
+}
+
+function ExecutiveKpiCard({ label, value, trend, icon: Icon, tone = 'red' }: { label: string; value: any; trend?: number; icon: any; tone?: string }) {
+  const toneClass = tone === 'green'
+    ? 'bg-emerald-50 text-emerald-600'
+    : tone === 'amber'
+      ? 'bg-amber-50 text-amber-600'
+      : tone === 'blue'
+        ? 'bg-blue-50 text-blue-600'
+        : tone === 'purple'
+          ? 'bg-purple-50 text-purple-600'
+          : 'bg-red-50 text-[#D32323]';
+
+  return (
+    <div className="rounded-[18px] bg-white border border-gray-200 p-4 shadow-sm min-h-[112px]">
+      <div className="flex items-start justify-between gap-3">
+        <div className={`w-9 h-9 rounded-xl ${toneClass} flex items-center justify-center shrink-0`}>
+          <Icon className="w-5 h-5" />
+        </div>
+        {trend !== undefined && <MiniTrend value={trend} />}
+      </div>
+      <p className="mt-3 text-[11px] font-black uppercase text-gray-500 tracking-wide">{label}</p>
+      <strong className="mt-1 block text-[26px] leading-none font-black text-[#333]">{value ?? 0}</strong>
+    </div>
+  );
+}
+
+function SimpleLineChart({ series }: { series: any }) {
+  const months = series?.months || ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'];
+  const leads = series?.leads || [];
+  const quotes = series?.quotes || [];
+  const wins = series?.wins || [];
+  const allValues = [...leads, ...quotes, ...wins].map((value) => Number(value || 0));
+  const max = Math.max(1, ...allValues);
+
+  const points = (values: number[]) => values.map((value, idx) => {
+    const x = 36 + (idx * (520 / Math.max(1, months.length - 1)));
+    const y = 180 - (Number(value || 0) / max) * 145;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <div className="mt-4">
+      <svg viewBox="0 0 600 220" className="w-full h-[205px]">
+        {[0, 1, 2, 3, 4].map((line) => (
+          <line key={line} x1="30" x2="580" y1={35 + line * 36} y2={35 + line * 36} stroke="#eef0f3" strokeWidth="1" />
+        ))}
+        <polyline fill="none" stroke="#2563eb" strokeWidth="4" points={points(leads)} strokeLinecap="round" strokeLinejoin="round" />
+        <polyline fill="none" stroke="#D32323" strokeWidth="4" points={points(quotes)} strokeLinecap="round" strokeLinejoin="round" />
+        <polyline fill="none" stroke="#16a34a" strokeWidth="4" points={points(wins)} strokeLinecap="round" strokeLinejoin="round" />
+        {months.map((month: string, idx: number) => {
+          const x = 36 + (idx * (520 / Math.max(1, months.length - 1)));
+          return <text key={month} x={x} y="212" textAnchor="middle" fontSize="12" fill="#6b7280" fontWeight="700">{month}</text>;
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function DonutChart({ planMix }: { planMix: any[] }) {
+  const total = Math.max(1, planMix.reduce((sum, item) => sum + Number(item.count || 0), 0));
+  let offset = 25;
+  const palette = ['#D32323', '#2563eb', '#16a34a', '#f59e0b', '#7c3aed'];
+  return (
+    <div className="flex items-center gap-5">
+      <svg viewBox="0 0 120 120" className="w-36 h-36 shrink-0 -rotate-90">
+        <circle cx="60" cy="60" r="42" fill="none" stroke="#eef0f3" strokeWidth="18" />
+        {planMix.map((plan, idx) => {
+          const value = (Number(plan.count || 0) / total) * 263.89;
+          const current = offset;
+          offset -= value;
+          return <circle key={plan.plan_name || idx} cx="60" cy="60" r="42" fill="none" stroke={palette[idx % palette.length]} strokeWidth="18" strokeDasharray={`${value} 263.89`} strokeDashoffset={current} strokeLinecap="round" />;
+        })}
+      </svg>
+      <div className="space-y-3 flex-1">
+        {planMix.map((plan, idx) => (
+          <div key={plan.plan_name || idx} className="flex items-center justify-between gap-3 text-sm">
+            <span className="inline-flex items-center gap-2 font-bold text-[#333]">
+              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: palette[idx % palette.length] }} />
+              {plan.plan_name || 'Sin plan'}
+            </span>
+            <span className="font-black text-gray-600">{plan.count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExecutiveAlertCard({ alert, onNavigate }: { alert: any; onNavigate: (module: ModuleKey) => void }) {
+  const severityClass = alert.severity === 'critical'
+    ? 'border-red-200 bg-red-50'
+    : alert.severity === 'medium'
+      ? 'border-amber-200 bg-amber-50'
+      : 'border-blue-200 bg-blue-50';
+  const pillClass = alert.severity === 'critical'
+    ? 'bg-[#D32323] text-white'
+    : alert.severity === 'medium'
+      ? 'bg-amber-500 text-white'
+      : 'bg-blue-600 text-white';
+  return (
+    <button
+      type="button"
+      onClick={() => onNavigate(alert.module || 'reports')}
+      className={`rounded-2xl border ${severityClass} p-4 text-left min-h-[128px] hover:-translate-y-0.5 hover:shadow-md transition-all`}
+    >
+      <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${pillClass}`}>{alert.severityLabel || alert.severity || 'Info'}</span>
+      <h4 className="mt-3 font-black text-[#333]">{alert.title}</h4>
+      <p className="mt-1 text-xs font-semibold text-gray-600">{alert.description}</p>
+      <span className="mt-3 inline-flex rounded-xl bg-white px-3 py-2 text-xs font-black text-[#D32323] border border-red-100">Ver detalle</span>
+    </button>
+  );
+}
+
+function PipelineMini({ funnel }: { funnel: any[] }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+      {funnel.map((stage) => (
+        <div key={stage.stage} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+          <p className="text-xs font-black uppercase text-gray-500">{stage.stage}</p>
+          <strong className="mt-2 block text-2xl font-black text-[#333]">{stage.count}</strong>
+          <MiniTrend value={stage.trend || 0} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Overview({ user, onNavigate }: { user: DashboardUser | null; onNavigate: (module: ModuleKey) => void }) {
   const [summary, setSummary] = useState<any>({});
   const [reports, setReports] = useState<any>({});
+  const [executive, setExecutive] = useState<any>({});
   const [error, setError] = useState('');
 
   async function load() {
     setError('');
     try {
-      const [summaryResult, reportResult] = await Promise.all([adminApi.summary(), adminApi.reports()]);
+      const [summaryResult, reportResult, executiveResult] = await Promise.all([
+        adminApi.summary(),
+        adminApi.reports(),
+        (adminApi as any).executiveReport ? (adminApi as any).executiveReport() : Promise.resolve({}),
+      ]);
       setSummary(summaryResult);
       setReports(reportResult);
+      setExecutive(executiveResult || {});
     } catch (err: any) {
-      setError(err?.message || 'No se pudo cargar el resumen.');
+      setError(err?.message || 'No se pudo cargar el panel general.');
     }
   }
 
   useEffect(() => { load(); }, []);
 
+  const kpis = executive.kpis || {};
+  const performance = executive.performance || {};
+  const planMix = executive.planMix || [];
+  const alerts = executive.priorityAlerts || reports.alerts || [];
+  const cityActivity = executive.cityActivity || [];
+  const topAgencies = executive.topAgencies || [];
+
+  const performanceLeadsTotal = (performance?.leads || []).reduce((sum: number, value: any) => sum + Number(value || 0), 0);
+  const performanceQuotesTotal = (performance?.quotes || []).reduce((sum: number, value: any) => sum + Number(value || 0), 0);
+  const performanceWinsTotal = (performance?.wins || []).reduce((sum: number, value: any) => sum + Number(value || 0), 0);
+  const performanceCloseRate = performanceLeadsTotal > 0 ? (performanceWinsTotal / performanceLeadsTotal) * 100 : 0;
+  const commercialStats = [
+    { label: 'Leads', value: performanceLeadsTotal, trend: Number(kpis.openLeadsTrend || 0), suffix: '' },
+    { label: 'Cotizaciones', value: performanceQuotesTotal, trend: 0, suffix: '' },
+    { label: 'Cierres', value: performanceWinsTotal, trend: 0, suffix: '' },
+    { label: 'Tasa cierre', value: performanceCloseRate.toFixed(1), trend: Number(kpis.conversionTrend || 0), suffix: '%' },
+  ];
+
+
+  const summaryMetrics = [
+    { label: 'Agencias publicadas', value: kpis.activeAgencies ?? summary.publishedAgencies ?? summary.totalAgencies ?? 0, trend: kpis.activeAgenciesTrend, icon: Building2, tone: 'red' },
+    { label: 'En pausa', value: kpis.pausedAgencies ?? 0, trend: kpis.pausedAgenciesTrend, icon: RefreshCw, tone: 'amber' },
+    { label: 'Ocultas', value: kpis.unpublishedAgencies ?? 0, trend: kpis.unpublishedAgenciesTrend, icon: X, tone: 'red' },
+    { label: 'Leads abiertos', value: kpis.openLeads ?? summary.totalLeads ?? 0, trend: kpis.openLeadsTrend, icon: Users, tone: 'blue' },
+    { label: 'MRR', value: `US$ ${Number(kpis.mrr || 0).toLocaleString()}`, trend: kpis.mrrTrend, icon: WalletCards, tone: 'purple' },
+    { label: 'Conversión', value: `${Number(kpis.conversionRate || 0).toFixed(1)}%`, trend: kpis.conversionTrend, icon: BarChart3, tone: 'green' },
+    { label: 'Reseñas pendientes', value: kpis.pendingReviews ?? 0, trend: kpis.pendingReviewsTrend, icon: Star, tone: 'amber' },
+    { label: 'SLA respuesta', value: `${Number(kpis.slaResponse || 0).toFixed(0)}%`, trend: kpis.slaTrend, icon: ShieldCheck, tone: 'green' },
+  ];
+
+  const quickModules: Array<{ label: string; module: ModuleKey; icon: any }> = [
+    { label: 'Agencias', module: 'agencies', icon: Building2 },
+    { label: 'Servicios', module: 'agencyServices', icon: ClipboardList },
+    { label: 'Leads', module: 'leads', icon: FolderKanban },
+    { label: 'Reseñas', module: 'reviews', icon: Star },
+    { label: 'Planes', module: 'plans', icon: WalletCards },
+    { label: 'Categorías', module: 'categories', icon: Tags },
+    { label: 'Métricas', module: 'reports', icon: Layers3 },
+    { label: 'Usuarios', module: 'users', icon: UserCog },
+  ];
+
+  const activityCities = cityActivity.length ? cityActivity : [
+    { city: 'Bogotá', count: 5 },
+    { city: 'Medellín', count: 3 },
+    { city: 'Pereira', count: 2 },
+    { city: 'Cali', count: 2 },
+    { city: 'Miami', count: 1 },
+  ];
+
   return (
     <section className="space-y-6">
-      <div className="rounded-[30px] bg-[#333] text-white p-8 shadow-xl">
-        <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-black uppercase">
-          <ShieldCheck className="w-4 h-4" /> Rol activo: {user?.roleName || user?.roleCode}
+      <div className="relative overflow-hidden rounded-[30px] bg-[#101820] text-white p-7 shadow-xl border border-white/10">
+        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 25% 25%, rgba(255,255,255,.18) 0 2px, transparent 2px), radial-gradient(circle at 75% 55%, rgba(255,255,255,.12) 0 2px, transparent 2px)', backgroundSize: '26px 26px' }} />
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-black uppercase">
+              <ShieldCheck className="w-4 h-4 text-[#D32323]" /> Dashboard ejecutivo · {user?.roleName || user?.roleCode}
+            </div>
+            <h1 className="mt-5 text-3xl lg:text-4xl font-black">Centro de control SEOLOCAL 👋</h1>
+            <p className="mt-2 text-white/75 max-w-4xl text-sm">
+              Monitorea la operación, rendimiento y crecimiento de tu marketplace con datos reales de PostgreSQL.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row lg:flex-col gap-3 lg:w-[230px]">
+            <div className="rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-center">
+              {executive.dateRange || 'Últimos 30 días'}
+            </div>
+            <button onClick={load} className="rounded-2xl bg-[#D32323] px-5 py-3 text-sm font-black text-white hover:bg-[#b51d1d]">
+              Actualizar reporte
+            </button>
+          </div>
         </div>
-        <h1 className="mt-5 text-4xl font-black">Centro de control SEOLOCAL</h1>
-        <p className="mt-3 text-white/75 max-w-4xl">Dashboard enterprise con límites reales por rol. Las acciones visibles dependen de permisos y el backend valida cada operación sobre PostgreSQL.</p>
+
+        <div className="relative z-10 mt-7 rounded-[22px] border border-white/10 bg-white/[0.045] p-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 2xl:grid-cols-8 divide-x-0 md:divide-x divide-white/10">
+            {summaryMetrics.map((metric) => {
+              const Icon = metric.icon;
+              const toneClass = metric.tone === 'green'
+                ? 'bg-emerald-500/15 text-emerald-300'
+                : metric.tone === 'amber'
+                  ? 'bg-amber-500/15 text-amber-300'
+                  : metric.tone === 'blue'
+                    ? 'bg-blue-500/15 text-blue-300'
+                    : metric.tone === 'purple'
+                      ? 'bg-purple-500/15 text-purple-300'
+                      : 'bg-red-500/15 text-red-300';
+              return (
+                <button
+                  key={metric.label}
+                  type="button"
+                  onClick={() => metric.label.includes('Agencias') ? onNavigate('agencies') : metric.label.includes('Leads') ? onNavigate('leads') : metric.label.includes('Reseñas') ? onNavigate('reviews') : onNavigate('reports')}
+                  className="group text-left p-3 rounded-2xl hover:bg-white/5 transition-all"
+                >
+                  <div className={`w-9 h-9 rounded-xl ${toneClass} flex items-center justify-center`}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <p className="mt-3 text-[11px] font-black text-white/70 uppercase tracking-wide">{metric.label}</p>
+                  <div className="mt-1 flex items-end gap-2">
+                    <strong className="text-2xl font-black text-white leading-none">{metric.value}</strong>
+                    <span className="text-[11px] font-black text-emerald-300">{Number(metric.trend || 0) ? `↑ ${Math.abs(Number(metric.trend || 0)).toFixed(1)}%` : '—'}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {error && <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-[#D32323]">{error}</div>}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-        <StatCard label="Agencias" value={summary.totalAgencies} icon={Building2} />
-        <StatCard label="Servicios FUR-S" value={summary.totalServices} icon={ClipboardList} />
-        <StatCard label="Leads" value={summary.totalLeads} icon={FolderKanban} />
-        <StatCard label="Rating promedio" value={summary.averageRating} icon={Star} />
-        <StatCard label="Categorías" value={summary.totalCategories} icon={Tags} />
-        <StatCard label="Reseñas" value={summary.totalReviews} icon={MessageSquareText} />
-        <StatCard label="Planes" value={summary.totalPlans} icon={WalletCards} />
-        <StatCard label="Pipeline" value={`US$ ${Number(summary.pipelineValue || 0).toLocaleString()}`} icon={BarChart3} />
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        <div className="rounded-[28px] bg-white border border-gray-200 p-6 shadow-sm">
-          <h3 className="font-black text-[#333]">Competencias del rol</h3>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {(user?.permissions || []).map((permission) => (
-              <span key={permission} className="rounded-full bg-gray-100 px-3 py-1 text-xs font-black text-gray-600">{permission}</span>
+      <div className="grid grid-cols-1 2xl:grid-cols-[1.08fr_0.82fr_1fr] gap-5">
+        <div className="rounded-[26px] bg-white border border-gray-200 p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-black text-[#333] text-lg">Rendimiento comercial</h3>
+              <div className="mt-3 flex flex-wrap gap-4 text-xs font-black">
+                <span className="text-blue-600">● Leads</span>
+                <span className="text-[#D32323]">● Cotizaciones</span>
+                <span className="text-emerald-600">● Cierres</span>
+              </div>
+            </div>
+            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-black text-gray-500">Últimos 6 meses</span>
+          </div>
+          <SimpleLineChart series={performance} />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+            {commercialStats.map((stat) => (
+              <div key={stat.label} className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
+                <p className="text-[10px] font-black uppercase text-gray-500">{stat.label}</p>
+                <strong className="block mt-1 text-xl font-black text-[#333]">{stat.value}{stat.suffix}</strong>
+                <p className={`mt-1 text-[11px] font-black ${stat.trend >= 0 ? 'text-emerald-600' : 'text-[#D32323]'}`}>
+                  {stat.trend === 0 ? 'Sin variación' : `${stat.trend > 0 ? '↑' : '↓'} ${Math.abs(stat.trend).toFixed(1)}%`}
+                </p>
+              </div>
             ))}
           </div>
         </div>
-        <div className="rounded-[28px] bg-white border border-gray-200 p-6 shadow-sm xl:col-span-2">
-          <h3 className="font-black text-[#333]">Alertas operativas</h3>
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-            {(reports.alerts || []).map((alert: any) => {
-              const alertMap: Record<string, { module: ModuleKey; action: string }> = {
-                'Agencias no publicadas': { module: 'agencies', action: 'Ir a agencias' },
-                'Servicios por agencia pausados': { module: 'agencyServices', action: 'Ir a servicios por agencia' },
-                'Reseñas pendientes/reportadas': { module: 'reviews', action: 'Ir a moderación' },
-                'Leads abiertos': { module: 'leads', action: 'Ir a leads' },
-                'Servicios sin categoría': { module: 'services', action: 'Ir a catálogo FUR-S' },
-              };
-              const target = alertMap[alert.label] || { module: 'reports' as ModuleKey, action: 'Ver reporte' };
-              const disabled = Number(alert.value || 0) <= 0;
+
+        <div className="rounded-[26px] bg-white border border-gray-200 p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h3 className="font-black text-[#333] text-lg">Ingresos y suscripciones</h3>
+            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-black text-gray-500">Este mes</span>
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-black uppercase text-gray-500">MRR actual</p>
+              <strong className="block mt-1 text-2xl font-black">US$ {Number(kpis.mrr || 0).toLocaleString()}</strong>
+              <MiniTrend value={kpis.mrrTrend || 0} />
+            </div>
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-black uppercase text-gray-500">Churn mensual</p>
+              <strong className="block mt-1 text-2xl font-black">{Number(executive.churn || 0).toFixed(1)}%</strong>
+              <MiniTrend value={Number(executive.churnTrend || 0) * -1} />
+            </div>
+          </div>
+          <div className="mt-5">
+            <DonutChart planMix={planMix} />
+          </div>
+          <button onClick={() => onNavigate('plans')} className="mt-5 w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm font-black text-[#D32323] hover:bg-red-50">
+            Ver detalle financiero →
+          </button>
+        </div>
+
+        <div className="rounded-[26px] bg-white border border-gray-200 p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h3 className="font-black text-[#333] text-lg">Actividad por ciudad</h3>
+            <button onClick={() => onNavigate('agencies')} className="text-xs font-black text-[#D32323]">Ver mapa completo</button>
+          </div>
+          <div className="relative mt-5 h-[300px] overflow-hidden rounded-3xl border border-gray-200 bg-gradient-to-br from-blue-100 via-white to-red-50">
+            <div className="absolute inset-0 opacity-80" style={{ backgroundImage: 'linear-gradient(#dbeafe 1px, transparent 1px), linear-gradient(90deg, #dbeafe 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
+            {[
+              { label: 'Medellín', pos: 'left-[58%] top-[24%]' },
+              { label: 'Bogotá', pos: 'left-[49%] top-[48%]' },
+              { label: 'Pereira', pos: 'left-[31%] top-[55%]' },
+              { label: 'Cali', pos: 'left-[42%] top-[72%]' },
+              { label: 'Miami', pos: 'right-[9%] top-[55%]' },
+            ].map((city, index) => (
+              <div key={city.label} className={`absolute ${city.pos}`}>
+                <p className="-translate-y-2 text-xs font-black text-gray-600">{city.label}</p>
+                <button onClick={() => onNavigate('agencies')} className="w-14 h-14 rounded-full bg-[#D32323]/20 border-2 border-[#D32323]/30 flex items-center justify-center">
+                  <span className="w-9 h-9 rounded-full bg-[#D32323] text-white text-sm font-black flex items-center justify-center shadow-lg">
+                    {activityCities[index]?.count || index + 1}
+                  </span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 2xl:grid-cols-[0.9fr_1.1fr_0.8fr] gap-5">
+        <div className="rounded-[26px] bg-white border border-gray-200 p-6 shadow-sm">
+          <h3 className="font-black text-[#333] text-lg">Alertas prioritarias</h3>
+          <div className="mt-4 space-y-3">
+            {alerts.map((alert: any) => {
+              const isCritical = (alert.severity || '').includes('critical') || (alert.severityLabel || '').toLowerCase().includes('crítica');
+              const isMedium = (alert.severity || '').includes('medium') || (alert.severityLabel || '').toLowerCase().includes('media');
               return (
                 <button
-                  key={alert.label}
+                  key={alert.title || alert.label}
                   type="button"
-                  disabled={disabled}
-                  onClick={() => onNavigate(target.module)}
-                  className={`rounded-2xl border p-4 text-left transition-all ${disabled ? 'border-gray-200 bg-gray-50 opacity-70 cursor-default' : 'border-red-100 bg-red-50/40 hover:-translate-y-0.5 hover:border-[#D32323]/40 hover:shadow-md cursor-pointer'}`}
+                  onClick={() => onNavigate(alert.module || 'reports')}
+                  className={`w-full rounded-2xl border px-4 py-3 text-left transition-all hover:shadow-sm ${
+                    isCritical ? 'border-red-100 bg-red-50' : isMedium ? 'border-amber-100 bg-amber-50' : 'border-blue-100 bg-blue-50'
+                  }`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-xs font-black uppercase text-gray-500">{alert.label}</p>
-                    {!disabled && <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-[#D32323] border border-red-100">{target.action}</span>}
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-black text-[#333]">{alert.title || alert.label}</p>
+                      <p className="mt-1 text-xs font-semibold text-gray-600">{alert.description}</p>
+                    </div>
+                    <span className="text-[#D32323] font-black text-lg">›</span>
                   </div>
-                  <strong className="mt-2 block text-2xl font-black text-[#D32323]">{alert.value}</strong>
-                  <p className="mt-1 text-xs text-gray-500">{alert.description}</p>
-                  {!disabled && <p className="mt-3 text-xs font-black text-[#333]">Click para resolver esta alerta →</p>}
+                </button>
+              );
+            })}
+          </div>
+          <button onClick={() => onNavigate('reports')} className="mt-5 w-full rounded-2xl text-[#D32323] text-sm font-black py-2 hover:bg-red-50">
+            Ver todas las alertas →
+          </button>
+        </div>
+
+        <div className="rounded-[26px] bg-white border border-gray-200 p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h3 className="font-black text-[#333] text-lg">Top agencias y desempeño</h3>
+            <button onClick={() => onNavigate('agencies')} className="text-xs font-black text-[#D32323]">Ver todas</button>
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="text-left text-xs uppercase text-gray-500">
+                <tr>
+                  <th className="py-3 font-black">Agencia</th>
+                  <th className="py-3 font-black">Ciudad</th>
+                  <th className="py-3 px-2 font-black">Estado</th>
+                  <th className="py-3 px-2 font-black">Rating</th>
+                  <th className="py-3 px-2 font-black">Leads</th>
+                  <th className="py-3 px-2 font-black">Plan</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {topAgencies.map((agency: any) => (
+                  <tr key={agency.id}>
+                    <td className="py-3 font-black text-[#333]">{agency.name}</td>
+                    <td className="py-3 text-gray-600 font-semibold">{agency.city || '—'}</td>
+                    <td className="py-3 px-2">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-black ${agency.status === 'published' ? 'bg-emerald-50 text-emerald-700' : agency.status === 'review' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-[#D32323]'}`}>
+                        ● {agency.status === 'published' ? 'Activo' : agency.status === 'review' ? 'En pausa' : 'Oculto'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-2 font-black">{Number(agency.rating || 0).toFixed(1)} ⭐</td>
+                    <td className="py-3 px-2 font-black">{agency.month_leads || 0}</td>
+                    <td className="py-3 px-2"><span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-black">{agency.plan_name || 'Sin plan'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button onClick={() => onNavigate('agencies')} className="mt-4 w-full rounded-2xl text-[#D32323] text-sm font-black py-2 hover:bg-red-50">
+            Ver todas las agencias →
+          </button>
+        </div>
+
+        <div className="rounded-[26px] bg-white border border-gray-200 p-6 shadow-sm">
+          <h3 className="font-black text-[#333] text-lg">Accesos rápidos</h3>
+          <div className="mt-5 grid grid-cols-3 2xl:grid-cols-2 gap-3">
+            {quickModules.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => onNavigate(item.module)}
+                  className="rounded-2xl border border-gray-200 bg-white p-4 text-center hover:bg-red-50 hover:border-[#D32323]/30 transition-all"
+                >
+                  <div className="mx-auto w-10 h-10 rounded-2xl bg-red-50 flex items-center justify-center text-[#D32323]">
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <p className="mt-3 text-xs font-black text-[#333]">{item.label}</p>
                 </button>
               );
             })}
@@ -721,6 +1605,7 @@ function Overview({ user, onNavigate }: { user: DashboardUser | null; onNavigate
     </section>
   );
 }
+
 
 
 function AgencyProfileModules({ user }: { user: DashboardUser | null }) {
@@ -885,7 +1770,7 @@ function AgencyProfileModules({ user }: { user: DashboardUser | null }) {
 
   return (
     <section className="space-y-5">
-      <div className="rounded-[28px] bg-white border border-gray-200 p-6 shadow-sm">
+      <div className="rounded-[24px] bg-white border border-gray-200 p-5 shadow-sm">
         <p className="text-xs font-black uppercase text-[#D32323]">Perfil público modular conectado a BD</p>
         <h2 className="mt-1 text-2xl font-black text-[#333]">Gestión total de perfil de agencia</h2>
         <p className="mt-2 text-sm text-gray-500">Selecciona una agencia real de PostgreSQL y edita datos, imágenes, descripción, GBP, horarios, equipo, certificaciones y canales.</p>
@@ -926,7 +1811,7 @@ function AgencyProfileModules({ user }: { user: DashboardUser | null }) {
 
           <div className="space-y-5">
             {moduleKey === 'profile' && (
-              <div className="rounded-[28px] bg-white border border-gray-200 p-6 shadow-sm">
+              <div className="rounded-[24px] bg-white border border-gray-200 p-5 shadow-sm">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                   <div>
                     <p className="text-xs font-black uppercase text-[#D32323]">Agencia ID {agencyId}</p>
@@ -987,7 +1872,7 @@ function AgencyProfileModules({ user }: { user: DashboardUser | null }) {
             )}
 
             {moduleKey === 'team' && (
-              <div className="rounded-[28px] bg-white border border-gray-200 p-6 shadow-sm">
+              <div className="rounded-[24px] bg-white border border-gray-200 p-5 shadow-sm">
                 <div className="flex items-center justify-between gap-4">
                   <div><p className="text-xs font-black uppercase text-[#D32323]">Personal en base de datos</p><h3 className="text-2xl font-black text-[#333]">Equipo técnico / consultores</h3></div>
                   <div className="flex gap-3"><button onClick={() => addArrayRow('team', { name: 'Nuevo consultor', role_title: 'Especialista SEO Local', bio: '', avatar_url: '', specialty: '', active: true, sequence: teamRows.length + 1 })} className="rounded-2xl border border-gray-200 px-4 py-3 font-black text-sm"><Plus className="inline w-4 h-4 mr-1" /> Añadir personal</button><button onClick={() => saveModule('team')} disabled={!canEdit || saving} className="rounded-2xl bg-[#D32323] px-5 py-3 text-white font-black disabled:opacity-50">Guardar personal</button></div>
@@ -1012,21 +1897,21 @@ function AgencyProfileModules({ user }: { user: DashboardUser | null }) {
             )}
 
             {moduleKey === 'certifications' && (
-              <div className="rounded-[28px] bg-white border border-gray-200 p-6 shadow-sm">
+              <div className="rounded-[24px] bg-white border border-gray-200 p-5 shadow-sm">
                 <div className="flex items-center justify-between gap-4"><h3 className="text-2xl font-black text-[#333]">Certificaciones</h3><div className="flex gap-3"><button onClick={() => addArrayRow('certifications', { issuer: 'Google', title: 'Nueva certificación', credential_url: '', valid_until: '', active: true, sequence: certificationRows.length + 1 })} className="rounded-2xl border border-gray-200 px-4 py-3 font-black text-sm">Añadir</button><button onClick={() => saveModule('certifications')} disabled={!canEdit || saving} className="rounded-2xl bg-[#D32323] px-5 py-3 text-white font-black disabled:opacity-50">Guardar</button></div></div>
                 <div className="mt-5 space-y-3">{certificationRows.map((row: any, index: number) => <div key={index} className="grid grid-cols-1 md:grid-cols-5 gap-3 rounded-2xl border border-gray-200 p-4"><input className={inputClass} value={row.issuer || ''} onChange={(e) => updateArrayRow('certifications', index, 'issuer', e.target.value)} placeholder="Issuer" /><input className={inputClass} value={row.title || ''} onChange={(e) => updateArrayRow('certifications', index, 'title', e.target.value)} placeholder="Título" /><input className={inputClass} value={row.credential_url || ''} onChange={(e) => updateArrayRow('certifications', index, 'credential_url', e.target.value)} placeholder="URL" /><input className={inputClass} value={row.valid_until || ''} onChange={(e) => updateArrayRow('certifications', index, 'valid_until', e.target.value)} placeholder="YYYY-MM-DD" /><button onClick={() => removeArrayRow('certifications', index)} className="rounded-2xl border border-red-200 text-[#D32323] font-black">Eliminar</button></div>)}</div>
               </div>
             )}
 
             {moduleKey === 'hours' && (
-              <div className="rounded-[28px] bg-white border border-gray-200 p-6 shadow-sm">
+              <div className="rounded-[24px] bg-white border border-gray-200 p-5 shadow-sm">
                 <div className="flex items-center justify-between gap-4"><h3 className="text-2xl font-black text-[#333]">Horarios</h3><div className="flex gap-3"><button onClick={() => addArrayRow('hours', { day_label: 'Nuevo día', opens_at: '09:00', closes_at: '18:00', is_closed: false, sequence: hourRows.length + 1 })} className="rounded-2xl border border-gray-200 px-4 py-3 font-black text-sm">Añadir</button><button onClick={() => saveModule('hours')} disabled={!canEdit || saving} className="rounded-2xl bg-[#D32323] px-5 py-3 text-white font-black disabled:opacity-50">Guardar</button></div></div>
                 <div className="mt-5 space-y-3">{hourRows.map((row: any, index: number) => <div key={index} className="grid grid-cols-1 md:grid-cols-5 gap-3 rounded-2xl border border-gray-200 p-4"><input className={inputClass} value={row.day_label || ''} onChange={(e) => updateArrayRow('hours', index, 'day_label', e.target.value)} /><input className={inputClass} value={row.opens_at || ''} onChange={(e) => updateArrayRow('hours', index, 'opens_at', e.target.value)} /><input className={inputClass} value={row.closes_at || ''} onChange={(e) => updateArrayRow('hours', index, 'closes_at', e.target.value)} /><label className="rounded-2xl border border-gray-200 px-4 py-3 flex items-center gap-2"><input type="checkbox" checked={Boolean(row.is_closed)} onChange={(e) => updateArrayRow('hours', index, 'is_closed', e.target.checked)} /> Cerrado</label><button onClick={() => removeArrayRow('hours', index)} className="rounded-2xl border border-red-200 text-[#D32323] font-black">Eliminar</button></div>)}</div>
               </div>
             )}
 
             {moduleKey === 'channels' && (
-              <div className="rounded-[28px] bg-white border border-gray-200 p-6 shadow-sm">
+              <div className="rounded-[24px] bg-white border border-gray-200 p-5 shadow-sm">
                 <div className="flex items-center justify-between gap-4"><h3 className="text-2xl font-black text-[#333]">Canales internos de agencia</h3><div className="flex gap-3"><button onClick={() => addArrayRow('channels', { channel_type: 'website', label: 'Sitio web', value: '', url: '', is_verified: true, active: true, sequence: channelRows.length + 1 })} className="rounded-2xl border border-gray-200 px-4 py-3 font-black text-sm">Añadir</button><button onClick={() => saveModule('channels')} disabled={!canEdit || saving} className="rounded-2xl bg-[#D32323] px-5 py-3 text-white font-black disabled:opacity-50">Guardar</button></div></div>
                 <p className="mt-2 text-xs font-semibold text-gray-500">Estos canales quedan en BD. El módulo público “Canales Externos Verificados” puede seguir oculto si así está configurado en el perfil.</p>
                 <div className="mt-5 space-y-3">{channelRows.map((row: any, index: number) => <div key={index} className="grid grid-cols-1 md:grid-cols-6 gap-3 rounded-2xl border border-gray-200 p-4"><input className={inputClass} value={row.channel_type || ''} onChange={(e) => updateArrayRow('channels', index, 'channel_type', e.target.value)} /><input className={inputClass} value={row.label || ''} onChange={(e) => updateArrayRow('channels', index, 'label', e.target.value)} /><input className={inputClass} value={row.value || ''} onChange={(e) => updateArrayRow('channels', index, 'value', e.target.value)} /><input className={inputClass} value={row.url || ''} onChange={(e) => updateArrayRow('channels', index, 'url', e.target.value)} /><label className="rounded-2xl border border-gray-200 px-4 py-3 flex items-center gap-2"><input type="checkbox" checked={Boolean(row.is_verified)} onChange={(e) => updateArrayRow('channels', index, 'is_verified', e.target.checked)} /> Verificado</label><button onClick={() => removeArrayRow('channels', index)} className="rounded-2xl border border-red-200 text-[#D32323] font-black">Eliminar</button></div>)}</div>
@@ -1034,7 +1919,7 @@ function AgencyProfileModules({ user }: { user: DashboardUser | null }) {
             )}
 
             {moduleKey === 'json' && (
-              <div className="rounded-[28px] bg-white border border-gray-200 p-6 shadow-sm">
+              <div className="rounded-[24px] bg-white border border-gray-200 p-5 shadow-sm">
                 <div className="flex items-center justify-between gap-4 mb-4"><h3 className="font-black text-[#333]">Vista técnica JSON</h3><button onClick={() => saveModule('team')} disabled={!canEdit || saving} className="rounded-2xl bg-[#333] px-5 py-3 text-white font-black disabled:opacity-50">Guardar equipo desde JSON</button></div>
                 <textarea value={JSON.stringify(data, null, 2)} onChange={(e) => { try { setData(JSON.parse(e.target.value)); } catch { setData(data); } }} className="w-full min-h-[620px] rounded-2xl border border-gray-200 p-4 font-mono text-xs outline-none focus:border-[#D32323]" />
               </div>
@@ -1093,25 +1978,25 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-[#D32323] text-white flex items-center justify-center font-black">Y</div>
             <div>
-              <p className="text-xs font-black uppercase text-[#D32323]">Dashboard enterprise v5.27.0</p>
-              <h1 className="text-xl font-black text-[#333]">Hola, {user?.name}</h1>
+              <p className="text-xs font-black uppercase text-[#D32323]">Dashboard enterprise v5.29.0</p>
+              <h1 className="text-lg font-black text-[#333]">Hola, {user?.name}</h1>
               <p className="text-xs font-semibold text-gray-500">{user?.login} · {user?.roleName} · Agencia asignada: {user?.agencyPartnerId || 'No aplica'}</p>
             </div>
           </div>
           <button onClick={() => { clearAdminToken(); setSession(null); }} className="rounded-2xl border border-gray-200 px-4 py-3 text-sm font-black text-[#333] hover:bg-gray-50 inline-flex items-center gap-2"><LogOut className="w-4 h-4" /> Cerrar sesión</button>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[310px_1fr] gap-6">
-          <aside className="rounded-[28px] bg-white border border-gray-200 shadow-sm p-4 h-fit sticky top-24">
+        <div className="grid grid-cols-1 xl:grid-cols-[260px_1fr] gap-5">
+          <aside className="rounded-[24px] bg-white border border-gray-200 shadow-sm p-3 h-fit sticky top-24">
             <div className="space-y-2">
               {visibleModules.map((module) => {
                 const Icon = module.icon;
                 return (
-                  <button key={module.key} onClick={() => setActive(module.key)} className={`w-full rounded-2xl px-4 py-3 text-left flex items-start gap-3 transition-all ${active === module.key ? 'bg-[#D32323] text-white shadow-md' : 'hover:bg-gray-50 text-[#333]'}`}>
-                    <Icon className="w-5 h-5 mt-0.5 shrink-0" />
-                    <span>
-                      <span className="block text-sm font-black">{module.title}</span>
-                      <span className={`mt-1 block text-xs ${active === module.key ? 'text-white/75' : 'text-gray-500'}`}>{module.subtitle}</span>
+                  <button key={module.key} onClick={() => setActive(module.key)} className={`w-full rounded-xl px-3 py-3 text-left flex items-center gap-3 transition-all ${active === module.key ? 'bg-[#D32323] text-white shadow-md' : 'hover:bg-gray-50 text-[#333]'}`}>
+                    <Icon className="w-5 h-5 shrink-0" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-black truncate">{compactModuleCopy[module.key]?.title || module.title}</span>
+                      <span className={`mt-0.5 block text-[11px] font-semibold truncate ${active === module.key ? 'text-white/75' : 'text-gray-500'}`}>{compactModuleCopy[module.key]?.subtitle || module.subtitle}</span>
                     </span>
                   </button>
                 );

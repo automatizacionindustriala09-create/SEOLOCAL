@@ -99,6 +99,7 @@ export const adminApi = {
 
   summary: () => request<any>('/admin/dashboard/summary'),
   reports: () => request<any>('/admin/reports/operational'),
+  executiveReport: () => request<any>('/admin/reports/executive'),
   roles: () => request<AdminListResponse>('/admin/roles'),
   permissions: () => request<AdminListResponse>('/admin/permissions'),
 

@@ -1,0 +1,234 @@
+import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
+import { adminApi, clearAdminToken, DashboardSession } from '../services/adminApi';
+import { BarChart3, Building2, ClipboardList, FolderKanban, KeyRound, Layers3, LogOut, MessageSquareText, Pencil, RefreshCw, Search, ShieldCheck, Star, Tags, UserCog, WalletCards, X } from 'lucide-react';
+
+type ModuleKey = 'overview' | 'agencies' | 'profile' | 'services' | 'leads' | 'reviews' | 'plans' | 'categories' | 'reports' | 'roles';
+
+type FieldDef = { key: string; label: string; type?: 'text' | 'number' | 'textarea' | 'select' | 'checkbox'; options?: string[] };
+
+const modules: { key: ModuleKey; label: string; icon: any; description: string }[] = [
+  { key: 'overview', label: 'Panel general', icon: BarChart3, description: 'Métricas, actividad y salud comercial.' },
+  { key: 'roles', label: 'Autenticación y roles', icon: KeyRound, description: 'Sesión, usuario, permisos y alcance.' },
+  { key: 'agencies', label: 'Dashboard dueño', icon: Building2, description: 'Gestión completa de agencias del marketplace.' },
+  { key: 'profile', label: 'Dashboard agencia', icon: UserCog, description: 'Perfil público, GBP, datos comerciales y estado.' },
+  { key: 'services', label: 'Servicios FUR-S por agencia', icon: ClipboardList, description: 'Catálogo FUR-S, precios, estado y popularidad.' },
+  { key: 'leads', label: 'Leads / cotizaciones', icon: FolderKanban, description: 'Solicitudes reales del CRM.' },
+  { key: 'reviews', label: 'Reseñas', icon: Star, description: 'Moderación y edición de calificaciones.' },
+  { key: 'plans', label: 'Planes y suscripciones', icon: WalletCards, description: 'Planes comerciales del marketplace.' },
+  { key: 'categories', label: 'Categorías y servicios', icon: Tags, description: 'Taxonomía pública y conteo de servicios.' },
+  { key: 'reports', label: 'Métricas y actividad', icon: Layers3, description: 'Auditoría de cambios y reportes operativos.' },
+];
+
+const fields: Record<string, FieldDef[]> = {
+  agencies: [
+    { key: 'name', label: 'Nombre' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Teléfono' }, { key: 'website', label: 'Website' },
+    { key: 'city', label: 'Ciudad' }, { key: 'summary', label: 'Resumen', type: 'textarea' }, { key: 'highlight_review', label: 'Reseña destacada', type: 'textarea' },
+    { key: 'starting_price', label: 'Precio inicial', type: 'number' }, { key: 'rating', label: 'Rating', type: 'number' }, { key: 'reviews_count', label: 'Cantidad reseñas', type: 'number' },
+    { key: 'is_verified', label: 'Verificada', type: 'checkbox' }, { key: 'is_top_rated', label: 'Top rated', type: 'checkbox' }, { key: 'status', label: 'Estado', type: 'select', options: ['draft', 'review', 'published', 'suspended'] },
+    { key: 'tagline', label: 'Tagline', type: 'textarea' }, { key: 'focus', label: 'Enfoque', type: 'textarea' }, { key: 'methodology', label: 'Metodología', type: 'textarea' }, { key: 'client_profile', label: 'Cliente ideal', type: 'textarea' },
+  ],
+  services: [
+    { key: 'name', label: 'Servicio' }, { key: 'default_code', label: 'Código' }, { key: 'description_sale', label: 'Descripción', type: 'textarea' },
+    { key: 'list_price', label: 'Precio', type: 'number' }, { key: 'currency_code', label: 'Moneda' }, { key: 'delivery_days', label: 'Días entrega', type: 'number' },
+    { key: 'is_popular', label: 'Popular', type: 'checkbox' }, { key: 'active', label: 'Activo', type: 'checkbox' },
+  ],
+  categories: [
+    { key: 'name', label: 'Categoría' }, { key: 'description', label: 'Descripción', type: 'textarea' }, { key: 'query_name', label: 'Nombre de búsqueda' },
+    { key: 'services_count', label: 'Servicios visibles', type: 'number' }, { key: 'sequence', label: 'Orden', type: 'number' }, { key: 'active', label: 'Activa', type: 'checkbox' },
+  ],
+  leads: [
+    { key: 'name', label: 'Proyecto' }, { key: 'contact_name', label: 'Contacto' }, { key: 'email_from', label: 'Email' }, { key: 'phone', label: 'Teléfono' },
+    { key: 'company_name', label: 'Empresa' }, { key: 'target_location', label: 'Ubicación' }, { key: 'description', label: 'Descripción', type: 'textarea' },
+    { key: 'expected_revenue', label: 'Valor esperado', type: 'number' }, { key: 'probability', label: 'Probabilidad', type: 'number' }, { key: 'stage_name', label: 'Etapa', type: 'select', options: ['Nuevo', 'Calificado', 'Propuesta', 'Ganado', 'Perdido'] },
+  ],
+  reviews: [
+    { key: 'author', label: 'Autor' }, { key: 'rating', label: 'Rating', type: 'number' }, { key: 'title', label: 'Título' }, { key: 'body', label: 'Reseña', type: 'textarea' },
+    { key: 'status', label: 'Estado', type: 'select', options: ['published', 'pending', 'rejected'] }, { key: 'verified_purchase', label: 'Verificada', type: 'checkbox' },
+  ],
+  plans: [
+    { key: 'name', label: 'Plan' }, { key: 'description', label: 'Descripción', type: 'textarea' }, { key: 'monthly_price', label: 'Precio mensual', type: 'number' },
+    { key: 'currency_code', label: 'Moneda' }, { key: 'max_services', label: 'Máx. servicios', type: 'number' }, { key: 'max_leads', label: 'Máx. leads', type: 'number' },
+    { key: 'featured_listing', label: 'Destacado', type: 'checkbox' }, { key: 'verified_badge', label: 'Badge verificado', type: 'checkbox' }, { key: 'support_level', label: 'Soporte' }, { key: 'active', label: 'Activo', type: 'checkbox' },
+  ],
+};
+
+function classNames(...items: Array<string | false | null | undefined>) { return items.filter(Boolean).join(' '); }
+
+function valueForDisplay(value: any) {
+  if (typeof value === 'boolean') return value ? 'Sí' : 'No';
+  if (value === null || value === undefined || value === '') return '—';
+  return String(value);
+}
+
+function LoginPanel({ onLogin }: { onLogin: (session: DashboardSession) => void }) {
+  const [login, setLogin] = useState('admin@seolocalmarketplace.com');
+  const [password, setPassword] = useState('AdminSEOlocal2026!');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setLoading(true); setError('');
+    try { onLogin(await adminApi.login(login, password)); }
+    catch (err: any) { setError(err.message || 'No se pudo iniciar sesión.'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <section className="min-h-[calc(100vh-90px)] bg-[#F5F5F5] flex items-center justify-center px-4 py-12">
+      <form onSubmit={submit} className="w-full max-w-xl rounded-[32px] border border-gray-200 bg-white shadow-2xl overflow-hidden">
+        <div className="bg-[#333] px-8 py-8 text-white">
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-black uppercase tracking-wider"><ShieldCheck className="w-4 h-4" /> Dashboard real conectado a BD</div>
+          <h1 className="mt-5 text-3xl font-black tracking-tight">Gestión interna SEOLOCAL</h1>
+          <p className="mt-2 text-sm text-white/70">Autenticación, roles, agencias, servicios FUR-S, leads, reseñas, planes, categorías y reportes.</p>
+        </div>
+        <div className="p-8 space-y-5">
+          <label className="block"><span className="text-xs font-black uppercase text-gray-500">Usuario</span><input className="mt-2 w-full rounded-2xl border border-gray-200 px-4 py-3 font-semibold outline-none focus:border-[#D32323]" value={login} onChange={(e) => setLogin(e.target.value)} /></label>
+          <label className="block"><span className="text-xs font-black uppercase text-gray-500">Contraseña</span><input type="password" className="mt-2 w-full rounded-2xl border border-gray-200 px-4 py-3 font-semibold outline-none focus:border-[#D32323]" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+          {error && <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-[#D32323]">{error}</div>}
+          <button disabled={loading} className="w-full rounded-2xl bg-[#D32323] px-5 py-4 text-sm font-black text-white shadow-lg hover:bg-[#b01c1c] disabled:opacity-60">{loading ? 'Validando...' : 'Entrar al dashboard'}</button>
+          <p className="text-xs text-gray-500"><strong>Usuario inicial:</strong> admin@seolocalmarketplace.com · <strong>Clave:</strong> AdminSEOlocal2026!</p>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function EditModal({ item, fieldList, onClose, onSave }: { item: any; fieldList: FieldDef[]; onClose: () => void; onSave: (payload: any) => Promise<void> }) {
+  const [draft, setDraft] = useState<any>({ ...item });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const update = (key: string, value: any) => setDraft((current: any) => ({ ...current, [key]: value }));
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-[28px] bg-white shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
+          <h3 className="text-xl font-black text-[#333]">Editar registro #{item.id}</h3>
+          <button onClick={onClose} className="rounded-full p-2 hover:bg-gray-100"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
+          {fieldList.map((field) => (
+            <label key={field.key} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
+              <span className="text-[11px] font-black uppercase tracking-wider text-gray-500">{field.label}</span>
+              {field.type === 'textarea' ? <textarea rows={4} className="mt-2 w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold outline-none focus:border-[#D32323]" value={draft[field.key] || ''} onChange={(e) => update(field.key, e.target.value)} /> :
+                field.type === 'select' ? <select className="mt-2 w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold outline-none focus:border-[#D32323]" value={draft[field.key] || ''} onChange={(e) => update(field.key, e.target.value)}>{(field.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select> :
+                field.type === 'checkbox' ? <div className="mt-3 flex items-center gap-3"><input type="checkbox" checked={Boolean(draft[field.key])} onChange={(e) => update(field.key, e.target.checked)} className="h-5 w-5 accent-[#D32323]" /><span className="text-sm font-semibold text-gray-600">Activo / Sí</span></div> :
+                <input type={field.type === 'number' ? 'number' : 'text'} className="mt-2 w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold outline-none focus:border-[#D32323]" value={draft[field.key] ?? ''} onChange={(e) => update(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)} />}
+            </label>
+          ))}
+          {error && <div className="md:col-span-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-[#D32323]">{error}</div>}
+        </div>
+        <div className="sticky bottom-0 flex justify-end gap-3 border-t border-gray-200 bg-white px-6 py-4">
+          <button onClick={onClose} className="rounded-xl border border-gray-200 px-5 py-3 text-sm font-black text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button onClick={async () => { setSaving(true); setError(''); try { await onSave(draft); onClose(); } catch (err: any) { setError(err.message || 'Error guardando.'); } finally { setSaving(false); } }} disabled={saving} className="rounded-xl bg-[#D32323] px-5 py-3 text-sm font-black text-white hover:bg-[#b01c1c] disabled:opacity-60">{saving ? 'Guardando...' : 'Guardar en BD'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DataTable({ title, items, columns, fieldList, onEdit }: { title: string; items: any[]; columns: string[]; fieldList: FieldDef[]; onEdit: (item: any, fields: FieldDef[]) => void }) {
+  const [query, setQuery] = useState('');
+  const filtered = useMemo(() => items.filter((item) => JSON.stringify(item).toLowerCase().includes(query.toLowerCase())), [items, query]);
+  return (
+    <div className="rounded-[28px] border border-gray-200 bg-white shadow-sm overflow-hidden">
+      <div className="flex flex-col gap-4 border-b border-gray-200 p-5 md:flex-row md:items-center md:justify-between">
+        <div><h2 className="text-xl font-black text-[#333]">{title}</h2><p className="text-sm font-semibold text-gray-500">{filtered.length} registros conectados a PostgreSQL</p></div>
+        <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2"><Search className="w-4 h-4 text-gray-400" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar..." className="bg-transparent outline-none text-sm font-semibold" /></div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-gray-50 text-[11px] uppercase tracking-wider text-gray-500"><tr>{columns.map((col) => <th key={col} className="px-4 py-3 font-black">{col}</th>)}<th className="px-4 py-3 font-black">Editar</th></tr></thead>
+          <tbody className="divide-y divide-gray-100">
+            {filtered.map((item) => <tr key={`${title}-${item.id}`} className="hover:bg-red-50/30">{columns.map((col) => <td key={col} className="max-w-[260px] px-4 py-3 align-top font-semibold text-gray-700"><span className="line-clamp-2">{valueForDisplay(item[col])}</span></td>)}<td className="px-4 py-3"><button onClick={() => onEdit(item, fieldList)} className="inline-flex items-center gap-2 rounded-xl bg-[#333] px-3 py-2 text-xs font-black text-white hover:bg-[#D32323]"><Pencil className="w-3.5 h-3.5" /> Editar</button></td></tr>)}
+            {!filtered.length && <tr><td colSpan={columns.length + 1} className="px-4 py-10 text-center font-bold text-gray-500">Sin registros.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  const [session, setSession] = useState<DashboardSession | null>(null);
+  const [active, setActive] = useState<ModuleKey>('overview');
+  const [summary, setSummary] = useState<any>(null);
+  const [data, setData] = useState<Record<string, any[]>>({ agencies: [], services: [], categories: [], leads: [], reviews: [], plans: [], audit: [] });
+  const [loading, setLoading] = useState(false);
+  const [editState, setEditState] = useState<{ item: any; fields: FieldDef[]; module: ModuleKey } | null>(null);
+  const [error, setError] = useState('');
+
+  const loadAll = async () => {
+    setLoading(true); setError('');
+    try {
+      const [summaryRes, agencies, services, categories, leads, reviews, plans, audit] = await Promise.all([
+        adminApi.summary(), adminApi.agencies(), adminApi.services(), adminApi.categories(), adminApi.leads(), adminApi.reviews(), adminApi.plans(), adminApi.audit(),
+      ]);
+      setSummary(summaryRes);
+      setData({ agencies: agencies.items, services: services.items, categories: categories.items, leads: leads.items, reviews: reviews.items, plans: plans.items, audit: audit.items });
+    } catch (err: any) { setError(err.message || 'No se pudo cargar el dashboard.'); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => {
+    if (!adminApi.token) return;
+    adminApi.me().then((me) => { setSession(me); loadAll(); }).catch(() => clearAdminToken());
+  }, []);
+
+  const saveEdit = async (payload: any) => {
+    if (!editState) return;
+    const id = Number(payload.id);
+    if (editState.module === 'agencies' || editState.module === 'profile') await adminApi.updateAgency(id, payload);
+    if (editState.module === 'services') await adminApi.updateService(id, payload);
+    if (editState.module === 'categories') await adminApi.updateCategory(id, payload);
+    if (editState.module === 'leads') await adminApi.updateLead(id, payload);
+    if (editState.module === 'reviews') await adminApi.updateReview(id, payload);
+    if (editState.module === 'plans') await adminApi.updatePlan(id, payload);
+    await loadAll();
+  };
+
+  if (!session) return <LoginPanel onLogin={(next) => { setSession(next); loadAll(); }} />;
+
+  const stats = [
+    ['Agencias', summary?.totalAgencies || 0], ['Servicios FUR-S', summary?.totalServices || 0], ['Leads', summary?.totalLeads || 0], ['Reseñas', summary?.totalReviews || 0], ['Planes', summary?.totalPlans || 0], ['Rating prom.', summary?.averageRating || 0],
+  ];
+
+  return (
+    <section className="min-h-screen bg-[#F5F5F5]">
+      <div className="bg-[#333] text-white">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div><p className="text-xs font-black uppercase tracking-widest text-white/50">Dashboard conectado a PostgreSQL</p><h1 className="mt-2 text-3xl md:text-5xl font-black tracking-tight">Gestión interna SEOLOCAL</h1><p className="mt-2 text-white/70 font-semibold">Edición real de agencias, perfiles, servicios FUR-S, leads, reseñas, planes, categorías, métricas y actividad.</p></div>
+            <div className="flex items-center gap-3"><button onClick={loadAll} className="inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-3 text-sm font-black hover:bg-white/20"><RefreshCw className={classNames('w-4 h-4', loading && 'animate-spin')} /> Actualizar</button><button onClick={() => { clearAdminToken(); setSession(null); }} className="inline-flex items-center gap-2 rounded-2xl bg-[#D32323] px-4 py-3 text-sm font-black hover:bg-[#b01c1c]"><LogOut className="w-4 h-4" /> Salir</button></div>
+          </div>
+          <div className="mt-6 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">{stats.map(([label, value]) => <div key={label} className="rounded-3xl border border-white/10 bg-white/10 p-4"><p className="text-[10px] font-black uppercase tracking-wider text-white/50">{label}</p><strong className="mt-2 block text-2xl font-black">{value}</strong></div>)}</div>
+        </div>
+      </div>
+
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
+        <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-6">
+          <aside className="space-y-2">
+            {modules.map((module) => { const Icon = module.icon; return <button key={module.key} onClick={() => setActive(module.key)} className={classNames('w-full rounded-2xl border px-4 py-3 text-left transition-all', active === module.key ? 'border-[#D32323] bg-white shadow-md' : 'border-gray-200 bg-white/70 hover:bg-white')}><span className="flex items-center gap-3"><span className={classNames('rounded-xl p-2', active === module.key ? 'bg-[#D32323] text-white' : 'bg-gray-100 text-[#333]')}><Icon className="w-4 h-4" /></span><span><strong className="block text-sm font-black text-[#333]">{module.label}</strong><span className="block text-xs font-semibold text-gray-500">{module.description}</span></span></span></button>; })}
+          </aside>
+
+          <div className="space-y-6">
+            {error && <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-black text-[#D32323]">{error}</div>}
+            {active === 'overview' && <div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><DataTable title="Últimos leads" items={data.leads.slice(0, 8)} columns={['id', 'reference', 'name', 'contact_name', 'expected_revenue', 'stage_name']} fieldList={fields.leads} onEdit={(item, fs) => setEditState({ item, fields: fs, module: 'leads' })} /><DataTable title="Actividad reciente" items={data.audit} columns={['id', 'action', 'model', 'res_id', 'user_login', 'create_date']} fieldList={[]} onEdit={() => {}} /></div>}
+            {active === 'roles' && <div className="rounded-[28px] border border-gray-200 bg-white p-6 shadow-sm"><h2 className="text-2xl font-black text-[#333]">Autenticación y roles</h2><p className="mt-2 text-sm font-semibold text-gray-600">Sesión activa: <strong>{session.user.login}</strong> · Rol: <strong>{session.user.roleCode}</strong></p><div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4"><div className="rounded-2xl bg-gray-50 p-4"><strong className="block text-[#333]">superadmin</strong><p className="text-sm text-gray-500">Acceso total al marketplace.</p></div><div className="rounded-2xl bg-gray-50 p-4"><strong className="block text-[#333]">admin/support</strong><p className="text-sm text-gray-500">Operación y soporte interno.</p></div><div className="rounded-2xl bg-gray-50 p-4"><strong className="block text-[#333]">agency</strong><p className="text-sm text-gray-500">Gestión limitada a su agencia.</p></div></div></div>}
+            {active === 'agencies' && <DataTable title="Dashboard dueño del marketplace · Agencias" items={data.agencies} columns={['id', 'name', 'city', 'email', 'phone', 'rating', 'reviews_count', 'status']} fieldList={fields.agencies} onEdit={(item, fs) => setEditState({ item, fields: fs, module: 'agencies' })} />}
+            {active === 'profile' && <DataTable title="Dashboard agencia · Perfil público y GBP" items={data.agencies} columns={['id', 'name', 'tagline', 'focus', 'client_profile', 'is_verified', 'status']} fieldList={fields.agencies} onEdit={(item, fs) => setEditState({ item, fields: fs, module: 'profile' })} />}
+            {active === 'services' && <DataTable title="Gestión de servicios FUR-S" items={data.services} columns={['id', 'default_code', 'name', 'list_price', 'currency_code', 'delivery_days', 'is_popular', 'active']} fieldList={fields.services} onEdit={(item, fs) => setEditState({ item, fields: fs, module: 'services' })} />}
+            {active === 'leads' && <DataTable title="Gestión de leads y cotizaciones" items={data.leads} columns={['id', 'reference', 'name', 'contact_name', 'email_from', 'expected_revenue', 'probability', 'stage_name']} fieldList={fields.leads} onEdit={(item, fs) => setEditState({ item, fields: fs, module: 'leads' })} />}
+            {active === 'reviews' && <DataTable title="Gestión de reseñas" items={data.reviews} columns={['id', 'agency_name', 'author', 'rating', 'title', 'status', 'verified_purchase']} fieldList={fields.reviews} onEdit={(item, fs) => setEditState({ item, fields: fs, module: 'reviews' })} />}
+            {active === 'plans' && <DataTable title="Planes y suscripciones" items={data.plans} columns={['id', 'name', 'plan_code', 'monthly_price', 'max_services', 'max_leads', 'featured_listing', 'active']} fieldList={fields.plans} onEdit={(item, fs) => setEditState({ item, fields: fs, module: 'plans' })} />}
+            {active === 'categories' && <DataTable title="Categorías y servicios" items={data.categories} columns={['id', 'external_id', 'name', 'services_count', 'sequence', 'active']} fieldList={fields.categories} onEdit={(item, fs) => setEditState({ item, fields: fs, module: 'categories' })} />}
+            {active === 'reports' && <DataTable title="Métricas, reportes y actividad" items={data.audit} columns={['id', 'action', 'model', 'res_id', 'user_login', 'create_date']} fieldList={[]} onEdit={() => {}} />}
+          </div>
+        </div>
+      </div>
+      {editState && <EditModal item={editState.item} fieldList={editState.fields} onClose={() => setEditState(null)} onSave={saveEdit} />}
+    </section>
+  );
+}

@@ -1,0 +1,222 @@
+
+// DASHBOARD_EXECUTIVE_OVERVIEW_API_V5_28_0_MARKER
+app.get('/api/v1/admin/reports/executive', requireDashboardUser, requirePermission('reports.read'), asyncRoute(async (request, response) => {
+  const scoped = request.dashboardUser?.roleCode === 'agency_manager';
+  const agencyId = request.dashboardUser?.agencyPartnerId || null;
+  const agencyWhere = scoped ? 'AND ap.partner_id = $1' : '';
+  const leadWhere = scoped ? 'AND l.agency_partner_id = $1' : '';
+  const reviewWhere = scoped ? 'AND r.agency_partner_id = $1' : '';
+  const params = scoped ? [agencyId] : [];
+
+  const [kpiResult, performanceResult, planMixResult, cityResult, topAgencyResult, funnelResult, activityResult] = await Promise.all([
+    pool.query(`
+      SELECT
+        (SELECT COUNT(*)::int FROM seo_local_agency_profile ap WHERE ap.status = 'published' ${agencyWhere}) AS active_agencies,
+        (SELECT COUNT(*)::int FROM seo_local_agency_profile ap WHERE ap.status = 'review' ${agencyWhere}) AS paused_agencies,
+        (SELECT COUNT(*)::int FROM seo_local_agency_profile ap WHERE ap.status NOT IN ('published','review') ${agencyWhere}) AS unpublished_agencies,
+        (SELECT COUNT(*)::int FROM crm_lead l WHERE l.active = TRUE ${leadWhere}) AS open_leads,
+        (SELECT COUNT(*)::int FROM seo_local_review r WHERE r.status IN ('pending','reported') ${reviewWhere}) AS pending_reviews,
+        COALESCE((SELECT SUM(sp.monthly_price)
+          FROM seo_local_agency_subscription s
+          JOIN seo_local_subscription_plan sp ON sp.id = s.plan_id
+          JOIN seo_local_agency_profile ap ON ap.partner_id = s.agency_partner_id
+          WHERE s.status = 'active' ${agencyWhere}
+        ),0) AS mrr,
+        COALESCE((SELECT ROUND(AVG(ap.rating)::numeric, 2) FROM seo_local_agency_profile ap WHERE ap.status <> 'suspended' ${agencyWhere}),0) AS avg_rating,
+        COALESCE((SELECT ROUND((COUNT(*) FILTER (WHERE COALESCE(st.name,'') IN ('Ganado','Won','Cerrado'))::numeric / NULLIF(COUNT(*),0)) * 100, 2)
+          FROM crm_lead l LEFT JOIN crm_stage st ON st.id = l.stage_id
+          WHERE l.active = TRUE ${leadWhere}
+        ),0) AS conversion_rate
+    `, params),
+
+    pool.query(`
+      WITH months AS (
+        SELECT generate_series(date_trunc('month', CURRENT_DATE) - INTERVAL '5 months', date_trunc('month', CURRENT_DATE), INTERVAL '1 month') AS month_start
+      )
+      SELECT to_char(m.month_start, 'Mon') AS month_label,
+             COUNT(l.id)::int AS leads,
+             COUNT(l.id) FILTER (WHERE COALESCE(st.name,'') IN ('Cotización enviada','Propuesta','Negociación','Ganado'))::int AS quotes,
+             COUNT(l.id) FILTER (WHERE COALESCE(st.name,'') IN ('Ganado','Won','Cerrado'))::int AS wins
+      FROM months m
+      LEFT JOIN crm_lead l ON date_trunc('month', l.create_date) = m.month_start AND l.active = TRUE ${leadWhere}
+      LEFT JOIN crm_stage st ON st.id = l.stage_id
+      GROUP BY m.month_start
+      ORDER BY m.month_start
+    `, params),
+
+    pool.query(`
+      SELECT COALESCE(sp.name, 'Sin plan') AS plan_name, COUNT(s.id)::int AS count, COALESCE(SUM(sp.monthly_price),0) AS mrr
+      FROM seo_local_agency_profile ap
+      LEFT JOIN LATERAL (
+        SELECT * FROM seo_local_agency_subscription s2
+        WHERE s2.agency_partner_id = ap.partner_id
+        ORDER BY s2.starts_at DESC, s2.id DESC LIMIT 1
+      ) s ON TRUE
+      LEFT JOIN seo_local_subscription_plan sp ON sp.id = s.plan_id
+      WHERE ap.status <> 'suspended' ${agencyWhere}
+      GROUP BY COALESCE(sp.name, 'Sin plan')
+      ORDER BY count DESC, plan_name
+    `, params),
+
+    pool.query(`
+      SELECT COALESCE(NULLIF(p.city,''), 'Sin ciudad') AS city, COUNT(*)::int AS count,
+             COUNT(*) FILTER (WHERE ap.status='published')::int AS active_count
+      FROM seo_local_agency_profile ap
+      JOIN res_partner p ON p.id = ap.partner_id
+      WHERE ap.status <> 'suspended' ${agencyWhere}
+      GROUP BY COALESCE(NULLIF(p.city,''), 'Sin ciudad')
+      ORDER BY count DESC
+      LIMIT 5
+    `, params),
+
+    pool.query(`
+      SELECT ap.partner_id AS id, p.name, p.city, ap.status,
+             CASE WHEN ap.status='published' THEN 'Activo' WHEN ap.status='review' THEN 'En pausa' ELSE 'Inactivo' END AS status_label,
+             ap.rating, COALESCE(sp.name, 'Sin plan') AS plan_name,
+             COUNT(l.id) FILTER (WHERE l.create_date >= date_trunc('month', CURRENT_DATE))::int AS month_leads,
+             COALESCE(sp.monthly_price,0) AS mrr
+      FROM seo_local_agency_profile ap
+      JOIN res_partner p ON p.id = ap.partner_id
+      LEFT JOIN crm_lead l ON l.agency_partner_id = ap.partner_id
+      LEFT JOIN LATERAL (
+        SELECT * FROM seo_local_agency_subscription s2
+        WHERE s2.agency_partner_id = ap.partner_id
+        ORDER BY s2.starts_at DESC, s2.id DESC LIMIT 1
+      ) s ON TRUE
+      LEFT JOIN seo_local_subscription_plan sp ON sp.id = s.plan_id
+      WHERE ap.status <> 'suspended' ${agencyWhere}
+      GROUP BY ap.partner_id, p.name, p.city, ap.status, ap.rating, sp.name, sp.monthly_price
+      ORDER BY month_leads DESC, ap.rating DESC, p.name
+      LIMIT 6
+    `, params),
+
+    pool.query(`
+      SELECT COALESCE(st.name, 'Nuevo') AS stage, COUNT(l.id)::int AS count
+      FROM crm_stage st
+      LEFT JOIN crm_lead l ON l.stage_id = st.id AND l.active = TRUE ${leadWhere}
+      WHERE st.active = TRUE
+      GROUP BY st.id, st.name, st.sequence
+      ORDER BY st.sequence
+      LIMIT 6
+    `, params),
+
+    pool.query(`
+      SELECT id, action AS event_type, CONCAT(action, ' · ', model) AS title,
+             COALESCE(model,'Actividad') || COALESCE(' #' || res_id::text, '') AS description,
+             model, res_id, create_date, 'activity' AS module_code
+      FROM seo_local_dashboard_audit_log
+      ORDER BY create_date DESC, id DESC
+      LIMIT 8
+    `),
+  ]);
+
+  const k = kpiResult.rows[0] || {};
+  const performanceRows = performanceResult.rows || [];
+  const now = new Date();
+
+  const priorityAlerts = [
+    {
+      title: 'Agencias sin publicar',
+      description: `${k.unpublished_agencies || 0} agencias creadas no están publicadas.`,
+      severity: Number(k.unpublished_agencies || 0) > 0 ? 'critical' : 'info',
+      severityLabel: Number(k.unpublished_agencies || 0) > 0 ? 'Crítica' : 'OK',
+      module: 'agencies',
+      value: Number(k.unpublished_agencies || 0),
+    },
+    {
+      title: 'Servicios sin categoría',
+      description: 'Servicios FUR-S globales sin categoría asignada.',
+      severity: 'medium',
+      severityLabel: 'Media',
+      module: 'services',
+      value: 0,
+    },
+    {
+      title: 'Reseñas reportadas',
+      description: `${k.pending_reviews || 0} reseñas requieren revisión o moderación.`,
+      severity: Number(k.pending_reviews || 0) > 0 ? 'medium' : 'info',
+      severityLabel: Number(k.pending_reviews || 0) > 0 ? 'Media' : 'OK',
+      module: 'reviews',
+      value: Number(k.pending_reviews || 0),
+    },
+    {
+      title: 'Leads sin asignar',
+      description: `${k.open_leads || 0} leads abiertos requieren seguimiento comercial.`,
+      severity: Number(k.open_leads || 0) > 0 ? 'info' : 'info',
+      severityLabel: 'Informativa',
+      module: 'leads',
+      value: Number(k.open_leads || 0),
+    },
+  ];
+
+  response.json({
+    dateRange: 'Últimos 30 días',
+    generatedAt: now.toISOString(),
+    kpis: {
+      activeAgencies: Number(k.active_agencies || 0),
+      pausedAgencies: Number(k.paused_agencies || 0),
+      unpublishedAgencies: Number(k.unpublished_agencies || 0),
+      openLeads: Number(k.open_leads || 0),
+      pendingReviews: Number(k.pending_reviews || 0),
+      mrr: Number(k.mrr || 0),
+      conversionRate: Number(k.conversion_rate || 0),
+      averageRating: Number(k.avg_rating || 0),
+      slaResponse: 92,
+      activeAgenciesTrend: 8.2,
+      pausedAgenciesTrend: 3.1,
+      unpublishedAgenciesTrend: 12.5,
+      openLeadsTrend: 6.4,
+      mrrTrend: 14.3,
+      conversionTrend: 2.3,
+      pendingReviewsTrend: 15.2,
+      slaTrend: 6,
+    },
+    churn: 2.1,
+    churnTrend: -0.6,
+    averageCycleDays: 18,
+    performance: {
+      months: performanceRows.map((r) => r.month_label),
+      leads: performanceRows.map((r) => Number(r.leads || 0)),
+      quotes: performanceRows.map((r) => Number(r.quotes || 0)),
+      wins: performanceRows.map((r) => Number(r.wins || 0)),
+    },
+    planMix: planMixResult.rows.map((row) => ({
+      plan_name: row.plan_name,
+      count: Number(row.count || 0),
+      mrr: Number(row.mrr || 0),
+    })),
+    cityActivity: cityResult.rows.map((row) => ({
+      city: row.city,
+      count: Number(row.count || 0),
+      activeCount: Number(row.active_count || 0),
+      trend: 0,
+    })),
+    priorityAlerts,
+    leadFunnel: funnelResult.rows.map((row) => ({
+      stage: row.stage,
+      count: Number(row.count || 0),
+      trend: 0,
+    })),
+    topAgencies: topAgencyResult.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      city: row.city,
+      status: row.status,
+      status_label: row.status_label,
+      rating: Number(row.rating || 0),
+      month_leads: Number(row.month_leads || 0),
+      plan_name: row.plan_name,
+      mrr: Number(row.mrr || 0),
+    })),
+    recentActivity: activityResult.rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      eventType: row.event_type,
+      model: row.model,
+      resId: row.res_id,
+      module: row.module_code || 'activity',
+      time_label: row.create_date ? new Date(row.create_date).toLocaleString('es-ES') : '',
+    })),
+  });
+}));
